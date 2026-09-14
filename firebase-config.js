@@ -16,7 +16,7 @@
    ========================================================================= */
 
 const FIREBASE_CONFIG = {
-  apiKey: "AIzaSyCt-Av26sG-L4DQNd02_hBa47tvrny8pSU",
+  apiKey: "AIzaSyCt-Av26-sG-L4DQNd02_hBa47tvrny8pSU",
   authDomain: "manskit-23d9f.firebaseapp.com",
   databaseURL: "https://manskit-23d9f-default-rtdb.asia-southeast1.firebasedatabase.app",
   projectId: "manskit-23d9f",
