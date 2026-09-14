@@ -379,3 +379,13 @@ body { background: var(--bg-main); color: var(--text-main); }
 .progress-fill { background: linear-gradient(90deg, #8f8f8f, #ffffff); }
 input:focus, select:focus, textarea:focus { border-color: #ffffff; box-shadow: 0 0 0 1px #ffffff; }
 ::selection { background: #ffffff; color: #000000; }
+
+
+.auth-screen { position: fixed; inset: 0; z-index: 500; display: flex; align-items: center; justify-content: center; padding: 20px; background: #090909; }
+.auth-screen.hidden { display: none; }
+.auth-card { width: min(430px, 100%); background: #151515; border: 1px solid #3a3a3a; border-radius: 18px; padding: 28px; box-shadow: 0 24px 80px rgba(0,0,0,.55); text-align: center; }
+.auth-card h2 { margin: 8px 0 6px; color: #fff; }
+.auth-card .lock-logo { width: 64px; height: 64px; }
+.auth-submit { width: 100%; margin-top: 8px; }
+.text-button { border: 0; background: transparent; color: #cfcfcf; text-decoration: underline; padding: 12px; margin-top: 4px; }
+.text-button:hover { color: #fff; }

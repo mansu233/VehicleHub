@@ -24,8 +24,7 @@ document.addEventListener('DOMContentLoaded', () => {
   });
   document.getElementById('entry-proof').addEventListener('change', handleProofFileChange);
   renderAll();
-  applyLockScreenIfNeeded();
-  checkRemindersOnLoad();
+  requireEmailSignIn();
 });
 
 window.addEventListener('manskit:changed', renderAll);
@@ -1404,6 +1403,7 @@ function renderSettingsBody() {
       </p>
       <button class="btn-primary" onclick="backupToFirebase()" ${fbConfigured ? '' : 'disabled'}>☁ Backup Now</button>
       <button class="btn-secondary" onclick="restoreFromFirebase()" ${fbConfigured ? '' : 'disabled'}>⬇ Restore from Cloud</button>
+      <button class="btn-secondary" onclick="signOutOfApp()">Sign Out</button>
       <p class="hint-text">${d.settings.firebase.lastSyncedAt ? `Last backed up: ${formatDateTime(d.settings.firebase.lastSyncedAt)}` : 'Not backed up yet.'}</p>
     </div>
 
@@ -1732,6 +1732,86 @@ async function reallyRestoreFromFirebase() {
     DB.replaceAll(data);
     toast('Restored from cloud ✓');
   } catch (e) { console.error(e); toast(e.message || 'Restore failed', 'error'); }
+}
+
+/* =========================================================================
+   REQUIRED FIREBASE EMAIL AUTHENTICATION
+   ========================================================================= */
+
+let firebaseAuthReady = false;
+let authUnsubscribe = null;
+
+function authErrorMessage(error) {
+  const code = error?.code || '';
+  const messages = {
+    'auth/invalid-credential': 'Email or password is incorrect.',
+    'auth/wrong-password': 'Email or password is incorrect.',
+    'auth/user-not-found': 'No account was found for this email.',
+    'auth/email-already-in-use': 'An account already exists for this email.',
+    'auth/weak-password': 'Use a stronger password with at least 6 characters.',
+    'auth/invalid-email': 'Enter a valid email address.',
+    'auth/too-many-requests': 'Too many attempts. Please try again later.'
+  };
+  return messages[code] || error?.message || 'Authentication failed.';
+}
+
+async function requireEmailSignIn() {
+  const screen = document.getElementById('auth-screen');
+  screen.classList.remove('hidden');
+  try {
+    authUnsubscribe = await FirebaseSync.onAuthStateChanged((user) => {
+      if (user) {
+        firebaseAuthReady = true;
+        screen.classList.add('hidden');
+        applyLockScreenIfNeeded();
+        checkRemindersOnLoad();
+        document.getElementById('auth-status').textContent = `Signed in as ${user.email}`;
+      } else {
+        firebaseAuthReady = false;
+        screen.classList.remove('hidden');
+        document.getElementById('auth-status').textContent = 'Sign in is required to continue.';
+      }
+    });
+  } catch (error) {
+    document.getElementById('auth-status').textContent = 'Firebase Authentication is not available.';
+    showAuthError(error.message || 'Enable Email/Password in Firebase Console.');
+  }
+}
+
+function showAuthError(message) {
+  const el = document.getElementById('auth-error');
+  el.textContent = message;
+  el.classList.remove('hidden');
+}
+function clearAuthError() { document.getElementById('auth-error').classList.add('hidden'); }
+function showAuthReset() { clearAuthError(); document.getElementById('auth-signin-view').classList.add('hidden'); document.getElementById('auth-reset-view').classList.remove('hidden'); }
+function showAuthSignIn() { clearAuthError(); document.getElementById('auth-reset-view').classList.add('hidden'); document.getElementById('auth-signin-view').classList.remove('hidden'); }
+async function signInToApp() {
+  clearAuthError();
+  const email = document.getElementById('auth-email').value.trim();
+  const password = document.getElementById('auth-password').value;
+  if (!email || !password) { showAuthError('Enter your email and password.'); return; }
+  try { document.getElementById('auth-status').textContent = 'Signing in…'; await FirebaseSync.signIn(email, password); }
+  catch (error) { showAuthError(authErrorMessage(error)); document.getElementById('auth-status').textContent = 'Sign in is required to continue.'; }
+}
+async function createAppAccount() {
+  clearAuthError();
+  const email = document.getElementById('auth-email').value.trim();
+  const password = document.getElementById('auth-password').value;
+  if (!email || !password) { showAuthError('Enter an email and password to create your account.'); return; }
+  if (password.length < 6) { showAuthError('Use a password with at least 6 characters.'); return; }
+  try { document.getElementById('auth-status').textContent = 'Creating account…'; await FirebaseSync.createAccount(email, password); }
+  catch (error) { showAuthError(authErrorMessage(error)); document.getElementById('auth-status').textContent = 'Sign in is required to continue.'; }
+}
+async function sendAppPasswordReset() {
+  clearAuthError();
+  const email = document.getElementById('auth-reset-email').value.trim();
+  if (!email) { showAuthError('Enter the email address for your account.'); return; }
+  try { await FirebaseSync.sendPasswordReset(email); document.getElementById('auth-status').textContent = 'Password reset email sent. Check your inbox.'; }
+  catch (error) { showAuthError(authErrorMessage(error)); }
+}
+async function signOutOfApp() {
+  try { await FirebaseSync.signOut(); } catch (error) { toast(authErrorMessage(error), 'error'); }
 }
 
 /* =========================================================================

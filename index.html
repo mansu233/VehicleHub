@@ -12,6 +12,29 @@
 </head>
 <body>
 
+  <!-- REQUIRED FIREBASE EMAIL SIGN-IN -->
+  <div id="auth-screen" class="auth-screen">
+    <div class="auth-card">
+      <img src="icons/icon-192.png" alt="" class="lock-logo">
+      <h2>Manskit Vehicle Hub</h2>
+      <p class="hint-text">Sign in to continue and keep your vehicle data backed up securely.</p>
+      <div id="auth-signin-view">
+        <div class="form-group"><label>Email Address</label><input type="email" id="auth-email" autocomplete="email" placeholder="you@example.com"></div>
+        <div class="form-group"><label>Password</label><input type="password" id="auth-password" autocomplete="current-password"></div>
+        <button class="btn-primary auth-submit" onclick="signInToApp()">Sign In</button>
+        <button class="btn-secondary auth-submit" onclick="createAppAccount()">Create Account</button>
+        <button class="text-button" onclick="showAuthReset()">Forgot Password?</button>
+      </div>
+      <div id="auth-reset-view" class="hidden">
+        <div class="form-group"><label>Email Address</label><input type="email" id="auth-reset-email" autocomplete="email" placeholder="you@example.com"></div>
+        <button class="btn-primary auth-submit" onclick="sendAppPasswordReset()">Send Reset Email</button>
+        <button class="text-button" onclick="showAuthSignIn()">Back to Sign In</button>
+      </div>
+      <p class="hint-text error-text hidden" id="auth-error"></p>
+      <p class="hint-text" id="auth-status">Checking secure sign-in…</p>
+    </div>
+  </div>
+
   <!-- APP LOCK SCREEN — shown on top of everything when App Lock is enabled -->
   <div id="lock-screen" class="lock-screen hidden">
     <div class="lock-card">

@@ -18,8 +18,7 @@
 const FIREBASE_CONFIG = {
   apiKey: "AIzaSyCt-Av26sG-L4DQNd02_hBa47tvrny8pSU",
   authDomain: "manskit-23d9f.firebaseapp.com",
-  // Assumed default Realtime Database URL for this Firebase project.
-  databaseURL: "https://manskit-23d9f-default-rtdb.firebaseio.com",
+  databaseURL: "https://manskit-23d9f-default-rtdb.asia-southeast1.firebasedatabase.app",
   projectId: "manskit-23d9f",
   storageBucket: "manskit-23d9f.firebasestorage.app",
   messagingSenderId: "504036502314",

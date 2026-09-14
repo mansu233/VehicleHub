@@ -6,7 +6,7 @@
    app itself — just fill in firebase-config.js once with your project's
    config object. See README-FIREBASE.md for full setup steps.
 
-   Data is stored at the Realtime Database path:  /manskit-backup
+   Data is stored at the Realtime Database path:  /manskit-backup/{userId}
    ========================================================================= */
 
 const FirebaseSync = {
@@ -24,10 +24,11 @@ const FirebaseSync = {
   _loadSdk() {
     if (this._sdkLoadPromise) return this._sdkLoadPromise;
     this._sdkLoadPromise = new Promise((resolve, reject) => {
-      if (window.firebase && window.firebase.database) { resolve(); return; }
+      if (window.firebase && window.firebase.database && window.firebase.auth) { resolve(); return; }
       const scripts = [
         'https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js',
-        'https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js'
+        'https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js',
+        'https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js'
       ];
       let loaded = 0;
       scripts.forEach(src => {
@@ -54,16 +55,51 @@ const FirebaseSync = {
     return this._app;
   },
 
+
+  async _getAuth() {
+    const app = await this._getApp();
+    return app.auth();
+  },
+
+  async signIn(email, password) {
+    const auth = await this._getAuth();
+    return (await auth.signInWithEmailAndPassword(email, password)).user;
+  },
+
+  async createAccount(email, password) {
+    const auth = await this._getAuth();
+    return (await auth.createUserWithEmailAndPassword(email, password)).user;
+  },
+
+  async sendPasswordReset(email) {
+    const auth = await this._getAuth();
+    await auth.sendPasswordResetEmail(email);
+  },
+
+  async onAuthStateChanged(callback) {
+    const auth = await this._getAuth();
+    return auth.onAuthStateChanged(callback);
+  },
+
+  async signOut() {
+    const auth = await this._getAuth();
+    return auth.signOut();
+  },
+
   async backup(dataObj) {
     const app = await this._getApp();
+    const user = app.auth().currentUser;
+    if (!user) throw new Error('Sign in is required before backing up.');
     const payload = { ...dataObj, _meta: { updatedAt: new Date().toISOString(), source: 'manskit-vehicle-hub' } };
-    await app.database().ref('manskit-backup').set(payload);
+    await app.database().ref(`manskit-backup/${user.uid}`).set(payload);
     return payload._meta.updatedAt;
   },
 
   async restore() {
     const app = await this._getApp();
-    const snap = await app.database().ref('manskit-backup').once('value');
+    const user = app.auth().currentUser;
+    if (!user) throw new Error('Sign in is required before restoring.');
+    const snap = await app.database().ref(`manskit-backup/${user.uid}`).once('value');
     const data = snap.val();
     if (!data || !data.vehicles) {
       throw new Error('No backup found in Firebase yet — run "Backup Now" first.');
