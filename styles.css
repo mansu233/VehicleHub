@@ -327,14 +327,27 @@ button { cursor: pointer; font-family: inherit; }
 .dashboard-heading { display:flex; justify-content:space-between; align-items:flex-end; margin-bottom:14px; }
 .dashboard-date { color:var(--text-muted); font-size:.78rem; }
 .dashboard-grid { display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-bottom:16px; }
-.dashboard-card { background:linear-gradient(145deg,var(--bg-surface-2),var(--bg-surface)); border:1px solid var(--border-color); border-radius:12px; padding:13px; min-height:112px; }
+.dashboard-card { background:linear-gradient(145deg,var(--bg-surface-2),var(--bg-surface)); border:1px solid var(--border-color); border-top:3px solid var(--text-muted); border-radius:12px; padding:16px 13px; min-height:112px; text-align:center; display:flex; flex-direction:column; justify-content:center; }
 .dashboard-card h3 { color:var(--text-main); margin-bottom:8px; font-size:.92rem; }
 .dashboard-card.alert { border-color:var(--warn); }
-.dashboard-card .dashboard-list { font-size:.78rem; line-height:1.55; }
+.dashboard-card.vehicle-card { border-top-color:var(--accent); }
+.dashboard-card.document-card { border-top-color:var(--warn); }
+.dashboard-card.reminder-card { border-top-color:var(--accent-strong); }
+.dashboard-card.ownership-card { border-top-color:var(--text-muted); }
+.dashboard-card .dashboard-list { font-size:.82rem; line-height:1.55; color:var(--text-main); }
+.dashboard-card .dashboard-list strong { color:var(--accent); font-size:.96rem; letter-spacing:.01em; }
+.dashboard-card .dashboard-list .hint-text { display:inline; color:var(--text-muted); }
+.dashboard-card .vehicle-details { display:flex; flex-direction:column; align-items:center; gap:5px; }
+.dashboard-card .vehicle-name { font-size:1.05rem; line-height:1.25; }
+.dashboard-card .vehicle-registration { color:var(--text-muted); font-size:.76rem; letter-spacing:.08em; text-transform:uppercase; }
+.dashboard-card .empty-registration { opacity:.7; letter-spacing:normal; text-transform:none; }
 .dashboard-card .dashboard-list div { white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
 .quick-entry-drawer { background:var(--bg-surface); border:1px solid var(--border-color); border-radius:12px; padding:12px; margin-bottom:16px; }
 .quick-entry-drawer summary { color:var(--accent); font-weight:700; cursor:pointer; margin-bottom:14px; }
 .quick-entry-drawer[open] summary { margin-bottom:16px; }
+.quick-entry-drawer select { appearance:auto; background:var(--bg-main); border:1px solid var(--text-muted); color:var(--text-main); font-weight:600; }
+.quick-entry-drawer select option { background:var(--bg-surface); color:var(--text-main); }
+.quick-entry-drawer .form-group label { color:var(--accent-strong); }
 .filter-grid { display:grid; grid-template-columns:1fr 1fr; gap:8px; }
 .filter-grid input, .filter-grid select { padding:9px; font-size:.82rem; }
 .log-filters { padding:12px; }
