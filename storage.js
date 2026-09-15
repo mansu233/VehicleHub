@@ -46,12 +46,14 @@ function defaultVehicle(name, type) {
   return {
     id: uid('veh'),
     name,
+    registrationNumber: '',
     type, // 'car' | 'bike' | 'other'
     ownership: { mode: 'single', owner: 'you' }, // vehicle-specific ownership
     paymentStatus: 'paid', // 'paid' means no loan/EMI details are needed
     coverZone: DEFAULT_COVER_ZONE,
     specs: emptySpecs(),
     gallery: {},
+    galleryLabels: {},
     acquisition: { exShowroom: 0, taxes: 0, registration: 0 },
     contributions: [],
     loan: { bankName: '', totalLoan: 0, interestRate: 0, tenureMonths: 0 },
@@ -131,6 +133,9 @@ const DB = {
       if (!v.specs) v.specs = emptySpecs();
       if (!v.specs.keySpecs) v.specs.keySpecs = emptySpecs().keySpecs;
       if (!v.gallery) v.gallery = {};
+      if (!v.galleryLabels) v.galleryLabels = {};
+      if (typeof v.registrationNumber !== 'string') v.registrationNumber = '';
+      v.registrationNumber = v.registrationNumber.trim().replace(/\s+/g, ' ').toUpperCase();
       if (!v.acquisition) v.acquisition = { exShowroom: 0, taxes: 0, registration: 0 };
       if (!v.paymentStatus) v.paymentStatus = v.loan?.totalLoan > 0 ? 'financed' : 'paid';
       if (!v.contributions) v.contributions = [];
@@ -170,20 +175,22 @@ const DB = {
   },
   listVehicles() { return Object.values(this.load().vehicles); },
 
-  addVehicle(name, type) {
+  addVehicle(name, type, registrationNumber = '') {
     const d = this.load();
     const v = defaultVehicle(name || 'New Vehicle', type || 'car');
+    v.registrationNumber = registrationNumber;
     d.vehicles[v.id] = v;
     d.activeVehicleId = v.id;
     this.save();
     return v;
   },
-  renameVehicle(id, name, type, ownership) {
+  renameVehicle(id, name, type, ownership, registrationNumber) {
     const v = this.load().vehicles[id];
     if (!v) return;
     if (name) v.name = name;
     if (type) v.type = type;
     if (ownership) v.ownership = { ...v.ownership, ...ownership };
+    if (registrationNumber !== undefined) v.registrationNumber = registrationNumber;
     this.save();
   },
   deleteVehicle(id) {
@@ -218,6 +225,13 @@ const DB = {
     const v = this.load().vehicles[vehicleId];
     if (!v) return;
     v.gallery[zone] = dataURL;
+    this.save();
+  },
+  setGalleryLabel(vehicleId, zone, label) {
+    const v = this.load().vehicles[vehicleId];
+    if (!v) return;
+    if (!v.galleryLabels) v.galleryLabels = {};
+    v.galleryLabels[zone] = label;
     this.save();
   },
   removeGalleryPhoto(vehicleId, zone) {

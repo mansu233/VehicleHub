@@ -1,4 +1,4 @@
-const CACHE_NAME = 'manskit-hub-v5';
+const CACHE_NAME = 'manskit-hub-v6-auth-config';
 const ASSETS = [
   './',
   './index.html',
@@ -34,6 +34,10 @@ self.addEventListener('activate', (event) => {
 });
 
 self.addEventListener('fetch', (event) => {
+  if (new URL(event.request.url).pathname.endsWith('/firebase-config.js')) {
+    event.respondWith(fetch(event.request, { cache: 'no-store' }).catch(() => caches.match(event.request)));
+    return;
+  }
   event.respondWith(
     caches.match(event.request).then((response) => {
       return response || fetch(event.request).catch(() => response);

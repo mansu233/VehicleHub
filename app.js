@@ -23,6 +23,7 @@ document.addEventListener('DOMContentLoaded', () => {
     DB.setActiveVehicle(e.target.value);
   });
   document.getElementById('entry-proof').addEventListener('change', handleProofFileChange);
+  document.addEventListener('blur', applyAutomaticTitleCase, true);
   renderAll();
   requireEmailSignIn();
 });
@@ -32,6 +33,18 @@ window.addEventListener('manskit:changed', renderAll);
 function setDefaultEntryDate() {
   const dateInput = document.getElementById('entry-date');
   if (dateInput && !dateInput.value) dateInput.value = todayDateStr();
+}
+
+function applyAutomaticTitleCase(event) {
+  const el = event.target;
+  if (!(el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement)) return;
+  if (el.type !== 'text' && el.tagName !== 'TEXTAREA') return;
+  if (['auth-email', 'auth-password', 'auth-reset-email', 'lock-password-input', 'lock-answer-input', 'lock-new-password'].includes(el.id)) return;
+  if (el.id.includes('registration')) {
+    el.value = normalizeRegistrationNumber(el.value);
+    return;
+  }
+  el.value = capitalizeFirst(el.value);
 }
 
 // ---- Toasts / Modal / Nav helpers ------------------------------------------
@@ -504,9 +517,10 @@ function renderDashboard() {
   const docs = (vehicle.documents || []).filter(d => d.expiryDate && (new Date(d.expiryDate + 'T00:00:00') - today) / 86400000 <= 30).sort((a,b) => a.expiryDate.localeCompare(b.expiryDate));
   const reminders = (vehicle.reminders || []).filter(r => r.dueDate && (new Date(r.dueDate + 'T00:00:00') - today) / 86400000 <= 30).sort((a,b) => a.dueDate.localeCompare(b.dueDate));
   const ownership = vehicle.ownership?.mode === 'partnership' ? `Partnership · ${vehicle.ownership.ownerName || peopleNames().you} & ${vehicle.ownership.partnerName || peopleNames().partner}` : `Single owner · ${vehicle.ownership?.ownerName || peopleNames().you}`;
+  const vehicleLabel = `${vehicle.name}${vehicle.registrationNumber ? ` · ${vehicle.registrationNumber}` : ''}`;
   const card = (title, items, empty, alert) => `<div class="dashboard-card ${alert && items.length ? 'alert' : ''}"><h3>${title}</h3><div class="dashboard-list">${items.length ? items.slice(0,4).map(x => `<div>${escapeHtml(x.label)} <span class="hint-text">· ${escapeHtml(formatDateOnly(x.date))}</span></div>`).join('') : `<span class="hint-text">${empty}</span>`}</div></div>`;
   const el = document.getElementById('dashboard-alerts');
-  if (el) el.innerHTML = card('Near expiry documents', docs.map(d => ({label:d.type, date:d.expiryDate})), 'All documents are clear for 30 days.', true) + card('Reminders', reminders.map(r => ({label:r.title, date:r.dueDate})), 'No reminders due in the next 30 days.', true) + `<div class="dashboard-card"><h3>Vehicle ownership</h3><div class="dashboard-list">${escapeHtml(ownership)}</div></div>`;
+  if (el) el.innerHTML = `<div class="dashboard-card"><h3>MANSKIT Vehicle</h3><div class="dashboard-list"><strong>${escapeHtml(vehicleLabel)}</strong></div></div>` + card('Near expiry documents', docs.map(d => ({label:d.type, date:d.expiryDate})), 'All documents are clear for 30 days.', true) + card('Reminders', reminders.map(r => ({label:r.title, date:r.dueDate})), 'No reminders due in the next 30 days.', true) + `<div class="dashboard-card"><h3>Vehicle ownership</h3><div class="dashboard-list">${escapeHtml(ownership)}</div></div>`;
 }
 
 /* =========================================================================
@@ -532,7 +546,7 @@ function renderProfileScreen() {
     </div>
     <div class="cover-caption">
       <strong>${escapeHtml(vehicle.name)}</strong>
-      <span class="hint-text">${capitalizeFirst(vehicle.type)} · ${vehicle.ownership?.mode === 'partnership' ? 'Partnership' : 'Single owner'}</span>
+      <span class="hint-text">${capitalizeFirst(vehicle.type)} · ${vehicle.registrationNumber ? escapeHtml(vehicle.registrationNumber) + ' · ' : ''}${vehicle.ownership?.mode === 'partnership' ? 'Partnership' : 'Single owner'}</span>
     </div>
   `;
 
@@ -584,12 +598,15 @@ function saveSpecEditor(sectionKey) {
 function renderGallery() {
   const vehicle = DB.getActiveVehicle();
   const grid = document.getElementById('photo-grid');
-  grid.innerHTML = GALLERY_ZONES.map(zone => {
+  const customZones = Object.keys(vehicle.gallery || {}).filter(zone => !GALLERY_ZONES.includes(zone));
+  const zones = [...GALLERY_ZONES, ...customZones];
+  grid.innerHTML = zones.map(zone => {
     const photo = vehicle.gallery[zone];
     const isCover = vehicle.coverZone === zone;
+    const label = vehicle.galleryLabels?.[zone] || ZONE_LABELS[zone] || 'Custom Photo';
     return `
       <div class="photo-zone ${photo ? 'has-photo' : ''}" onclick="handlePhotoZoneTap('${zone}')">
-        ${photo ? `<img src="${photo}" alt="${ZONE_LABELS[zone]}">` : `<span>${ZONE_LABELS[zone]}</span>`}
+        ${photo ? `<img src="${photo}" alt="${escapeHtml(label)}">` : `<span>${escapeHtml(label)}</span>`}
         ${isCover ? '<span class="cover-badge">Cover</span>' : ''}
       </div>
     `;
@@ -599,10 +616,11 @@ function renderGallery() {
 function handlePhotoZoneTap(zone) {
   const vehicle = DB.getActiveVehicle();
   const existing = vehicle.gallery[zone];
+  const label = vehicle.galleryLabels?.[zone] || ZONE_LABELS[zone] || 'Custom Photo';
   if (existing) {
     openModal(`
-      <h3>${ZONE_LABELS[zone]}</h3>
-      <img src="${existing}" alt="${ZONE_LABELS[zone]}" class="modal-photo-preview" onclick="openZoomViewer('${existing}')">
+      <h3>${escapeHtml(label)}</h3>
+      <img src="${existing}" alt="${escapeHtml(label)}" class="modal-photo-preview" onclick="openZoomViewer('${existing}')">
       <p class="hint-text">Tap the photo to pinch-zoom and inspect closely.</p>
       <div class="modal-actions">
         <button class="btn-secondary" onclick="closeModal()">Cancel</button>
@@ -630,6 +648,26 @@ function triggerZoneUpload(zone) {
     toast('Photo saved');
   };
   input.click();
+}
+function openCustomPhotoUpload() {
+  openModal(`
+    <h3>Add Custom Photo</h3>
+    <div class="form-group"><label>Photo Name</label><input type="text" id="custom-photo-label" placeholder="e.g. Insurance Sticker"></div>
+    <div class="form-group"><label>Photo</label><input type="file" id="custom-photo-file" accept="image/*" capture="environment"></div>
+    <div class="modal-actions"><button class="btn-secondary" onclick="closeModal()">Cancel</button><button class="btn-primary" onclick="saveCustomPhoto()">Save Photo</button></div>
+  `);
+}
+async function saveCustomPhoto() {
+  const label = capitalizeFirst(document.getElementById('custom-photo-label').value.trim()) || 'Custom Photo';
+  const file = document.getElementById('custom-photo-file').files[0];
+  if (!file) { toast('Choose a photo first'); return; }
+  const zone = `custom_${Date.now()}`;
+  const dataUrl = await compressImageFile(file);
+  const vehicleId = DB.getActiveVehicle().id;
+  DB.setGalleryPhoto(vehicleId, zone, dataUrl);
+  DB.setGalleryLabel(vehicleId, zone, label);
+  closeModal();
+  toast('Custom photo saved');
 }
 function removeZonePhoto(zone) {
   DB.removeGalleryPhoto(DB.getActiveVehicle().id, zone);
@@ -1472,6 +1510,7 @@ function openAddVehicle() {
   openModal(`
     <h3>Add Vehicle</h3>
     <div class="form-group"><label>Name</label><input type="text" id="veh-name" placeholder="e.g. Weekend Bike"></div>
+    <div class="form-group"><label>Registration Number</label><input type="text" id="veh-registration" placeholder="e.g. MH 12 AB 1234" autocapitalize="characters"></div>
     <div class="form-group"><label>Type</label>
       <select id="veh-type"><option value="car">Car</option><option value="bike">Bike / Scooter</option><option value="other">Other</option></select>
     </div>
@@ -1488,8 +1527,9 @@ function saveAddVehicle() {
   if (!name) { toast('Give the vehicle a name'); return; }
   const ownership = readVehicleOwnershipForm();
   if (ownership.mode === 'partnership' && !ownership.partnerName) { toast('Enter both real owner names'); return; }
-  const v = DB.addVehicle(name, type);
-  DB.renameVehicle(v.id, null, null, ownership);
+  const registrationNumber = normalizeRegistrationNumber(document.getElementById('veh-registration').value);
+  const v = DB.addVehicle(name, type, registrationNumber);
+  DB.renameVehicle(v.id, null, null, ownership, registrationNumber);
   closeModal();
   closeSettings(); // fix #8: return to the main app so the new vehicle is visible
   toast('Vehicle added');
@@ -1499,6 +1539,7 @@ function openEditVehicle(id) {
   openModal(`
     <h3>Edit Vehicle</h3>
     <div class="form-group"><label>Name</label><input type="text" id="veh-edit-name" value="${escapeAttr(v.name)}"></div>
+    <div class="form-group"><label>Registration Number</label><input type="text" id="veh-edit-registration" value="${escapeAttr(v.registrationNumber || '')}" autocapitalize="characters"></div>
     <div class="form-group"><label>Type</label>
       <select id="veh-edit-type">
         <option value="car" ${v.type === 'car' ? 'selected' : ''}>Car</option>
@@ -1516,7 +1557,7 @@ function openEditVehicle(id) {
 function saveEditVehicle(id) {
   const ownership = readVehicleOwnershipForm();
   if (ownership.mode === 'partnership' && !ownership.partnerName) { toast('Enter both real owner names'); return; }
-  DB.renameVehicle(id, capitalizeFirst(document.getElementById('veh-edit-name').value.trim()), document.getElementById('veh-edit-type').value, ownership);
+  DB.renameVehicle(id, capitalizeFirst(document.getElementById('veh-edit-name').value.trim()), document.getElementById('veh-edit-type').value, ownership, normalizeRegistrationNumber(document.getElementById('veh-edit-registration').value));
   closeModal();
   toast('Vehicle updated');
 }
@@ -2004,4 +2045,7 @@ function capitalizeFirst(str) {
   const s = (str || '').toString().trim().replace(/\s+/g, ' ');
   if (!s) return s;
   return s.toLocaleLowerCase().replace(/\b[\p{L}\p{N}]/gu, ch => ch.toLocaleUpperCase());
+}
+function normalizeRegistrationNumber(str) {
+  return (str || '').toString().trim().replace(/\s+/g, ' ').toUpperCase();
 }
