@@ -1,0 +1,187 @@
+'use strict';
+const $=s=>document.querySelector(s),LS='mk_db_v6';
+const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const uid=()=>Math.random().toString(36).slice(2,9),today=()=>new Date().toISOString().slice(0,10);
+const money=n=>'₹'+Number(n||0).toLocaleString('en-IN',{maximumFractionDigits:0});
+const days=d=>Math.ceil((new Date(d)-new Date(today()))/864e5);
+const ZONES=['Front','Rear','Left side','Right side','Bumpers','Doors','Interior'];
+const TYPES={fuel:'Fuel',maintenance:'Maint.',purchase:'RTO/Buy',expense:'Expense'};
+const DOCS=['RC','Insurance','PUC','Driving License','Other'];
+const DEF={fuel:['Petrol','Diesel','CNG','EV charging'],maintenance:['Oil change','Tyres','Brakes','Battery','General service'],purchase:['RTO & registration','Insurance premium','Accessories','Loan fee'],expense:['Toll','Parking','Car wash','Fine']};
+const NAV=[['home','⌂','Home'],['add','＋','Log'],['prof','🚘','Profile'],['fin','₹','Finance'],['logs','☰','History'],['set','⚙','Settings']];
+const sel=(a,o)=>a.map(i=>`<option ${i===o?'selected':''}>${esc(i)}</option>`).join('');
+let scr='home',type='fuel',editId=null,fb=null,F={q:'',t:'all',s:'new'};
+
+const newV=(name,plate)=>({id:uid(),name,plate,model:'',odo0:0,partners:['You','Partner'],specs:[],docs:[],photos:{},damages:[],logs:[],fin:{},settles:[],rem:[]});
+function fix(d){d.v.forEach(v=>{['specs','docs','damages','logs','settles','rem'].forEach(k=>v[k]=Object.values(v[k]||{}));v.photos=v.photos||{};v.fin=v.fin||{};v.partners=Object.values(v.partners||['You'])});d.cats=d.cats||DEF;return d}
+function load(){try{const d=JSON.parse(localStorage.getItem(LS));if(d&&d.v)return fix(d)}catch(e){}const v=newV('My Vehicle','');return{v:[v],act:v.id,cats:DEF,pin:null,lastBackup:null,user:null}}
+let db=load();
+const save=()=>{try{localStorage.setItem(LS,JSON.stringify(db))}catch(e){alert('Storage is full. Export a JSON backup, then remove old photos.')}};
+const V=()=>db.v.find(x=>x.id===db.act)||db.v[0];
+function toast(t){const e=$('#toast');e.textContent=t;e.classList.remove('hide');setTimeout(()=>e.classList.add('hide'),2200)}
+
+/* ---------- calculations ---------- */
+const odo=v=>Math.max(+v.odo0||0,0,...v.logs.map(l=>+l.odo||0));
+function mileage(v){const f=v.logs.filter(l=>l.t==='fuel'&&+l.lit>0).sort((a,b)=>a.odo-b.odo),seg=[];
+ for(let i=1;i<f.length;i++){const km=f[i].odo-f[i-1].odo;if(km>0)seg.push({km,l:+f[i].lit,e:km/f[i].lit,id:f[i].id})}
+ const km=seg.reduce((a,s)=>a+s.km,0),L=seg.reduce((a,s)=>a+s.l,0);return{avg:L?km/L:0,seg,last:f[f.length-1]}}
+function ledger(v){const P=v.partners,n=P.length,net=Object.fromEntries(P.map(p=>[p,0]));
+ v.logs.filter(l=>l.scope==='shared'&&net[l.payer]!==undefined).forEach(l=>{P.forEach(p=>net[p]-=l.amt/n);net[l.payer]+=+l.amt});
+ v.settles.forEach(s=>P.forEach(p=>net[p]-=(s.net[p]||0)));return net}
+function due(v){const o=odo(v);return v.specs.filter(s=>+s.km>0||+s.days>0).map(s=>{let kmL=null,dL=null,st='ok';
+ if(+s.km>0){kmL=(+s.lastOdo||0)+ +s.km-o;st=kmL<=0?'bad':kmL<=500?'warn':'ok'}
+ if(+s.days>0&&s.lastDate){dL=days(s.lastDate)+ +s.days;if(dL<=0)st='bad';else if(dL<=7&&st==='ok')st='warn'}
+ return{...s,kmL,dL,st}})}
+function alerts(v){const a=[];
+ v.docs.forEach(d=>{const n=days(d.exp);if(n<=30)a.push({c:n<0?'bad':'warn',t:`${d.type} ${n<0?'expired '+(-n)+' days ago':'expires in '+n+' days'}`})});
+ v.rem.filter(r=>!r.done).forEach(r=>{const n=days(r.date);if(n<=7)a.push({c:n<0?'bad':'warn',t:`${r.title} ${n<0?'is overdue':n===0?'is due today':'is due in '+n+' days'}`,rid:r.id})});
+ due(v).filter(s=>s.st!=='ok').forEach(s=>a.push({c:s.st,t:`${s.k} service ${s.st==='bad'?'is due now':'is due soon'}`,sid:s.id}));
+ if(v.logs.length&&(!db.lastBackup||Date.now()-db.lastBackup>7*864e5))a.push({c:'warn',t:'Your last backup is over 7 days old. Export JSON or back up to the cloud.'});
+ return a}
+
+/* ---------- images (images only, compressed) ---------- */
+const okImg=f=>f&&/^image\/(jpe?g|png|webp)$/i.test(f.type)&&/\.(jpe?g|png|webp)$/i.test(f.name);
+const pic=f=>new Promise((ok,no)=>{if(!okImg(f))return no(Error('Only JPG, PNG or WEBP images are allowed. Other files (APK, MP3, etc.) are blocked.'));
+ const r=new FileReader();r.onload=()=>{const i=new Image();i.onload=()=>{const k=Math.min(1,900/Math.max(i.width,i.height)),c=document.createElement('canvas');c.width=i.width*k;c.height=i.height*k;c.getContext('2d').drawImage(i,0,0,c.width,c.height);ok(c.toDataURL('image/jpeg',.72))};i.onerror=()=>no(Error('This image could not be read.'));i.src=r.result};r.readAsDataURL(f)});
+
+/* ---------- screens ---------- */
+function barChart(v){const m={};v.logs.forEach(l=>{const k=l.date.slice(0,7);m[k]=(m[k]||0)+ +l.amt});const ks=[];const d=new Date();for(let i=5;i>=0;i--){const x=new Date(d.getFullYear(),d.getMonth()-i,1);ks.push(x.toISOString().slice(0,7))}
+ const mx=Math.max(1,...ks.map(k=>m[k]||0));return`<svg viewBox="0 0 300 100" width="100%" role="img" aria-label="Monthly spend">${ks.map((k,i)=>{const h=(m[k]||0)/mx*60;return`<rect x="${i*50+10}" y="${70-h}" width="30" height="${h}" rx="4" fill="#f5a623"/><text x="${i*50+25}" y="86" font-size="9" fill="#8b97aa" text-anchor="middle">${k.slice(5)}</text><text x="${i*50+25}" y="${66-h}" font-size="8" fill="#e8edf5" text-anchor="middle">${m[k]?Math.round(m[k]/1000*10)/10+'k':''}</text>`}).join('')}</svg>`}
+function lineChart(seg){if(seg.length<2)return'<p class=sb>Log two full-tank fill-ups to see your mileage trend.</p>';const s=seg.slice(-8),mx=Math.max(...s.map(x=>x.e)),mn=Math.min(...s.map(x=>x.e)),r=mx-mn||1;
+ const p=s.map((x,i)=>[10+i*(280/(s.length-1)),70-(x.e-mn)/r*55]);return`<svg viewBox="0 0 300 90" width="100%" role="img" aria-label="Mileage trend"><polyline points="${p.map(a=>a.join(',')).join(' ')}" fill="none" stroke="#2dd4bf" stroke-width="2.5"/>${p.map((a,i)=>`<circle cx="${a[0]}" cy="${a[1]}" r="3" fill="#2dd4bf"/><text x="${a[0]}" y="${a[1]-7}" font-size="8" fill="#e8edf5" text-anchor="middle">${s[i].e.toFixed(1)}</text>`).join('')}</svg>`}
+const PP=v=>v.partners.length<2?'':`<div class=card><div class=hd>Payments by partner</div>${v.partners.map(p=>{const m=v.logs.filter(l=>l.payer===p),t=m.reduce((x,l)=>x+ +l.amt,0),s=m.filter(l=>l.scope==='shared').reduce((x,l)=>x+ +l.amt,0);return`<div class=row><div>${esc(p)}<div class=sb>Shared ${money(s)} · Personal ${money(t-s)} · ${m.length} entries</div></div><b>${money(t)}</b></div>`}).join('')}</div>`;
+const S={
+home(v){const L=v.logs,sum=t=>L.filter(l=>t.includes(l.t)).reduce((a,l)=>a+ +l.amt,0),tot=sum(Object.keys(TYPES)),m=mileage(v),al=alerts(v),o=odo(v),mo=L.filter(l=>l.date.slice(0,7)===today().slice(0,7)).reduce((a,l)=>a+ +l.amt,0);
+ const lo=L.length?Math.min(...L.map(l=>+l.odo)):0,kms=o-Math.min(lo||o,+v.odo0||lo||o),cpk=kms>0?tot/kms:0,sv=due(v),lf=m.last,ls=lf&&m.seg.find(s=>s.id===lf.id);
+ return`<div class="card"><span class=plate>${esc(v.plate||'NO PLATE')}</span> <b>${esc(v.name)}</b><div class=sb>${esc(v.model)}</div><div class=big>${o.toLocaleString('en-IN')} <small class=sb>km</small></div></div>
+ <div class="al ${al.length?al[0].c:'ok'}">${al.length?`<b>${al.length} alert${al.length>1?'s':''}:</b> ${esc(al[0].t)}`:'All papers and services are up to date.'}</div>
+ <div class=grid><div class=st><small>Total spend</small><b>${money(tot)}</b></div><div class=st><small>Fuel</small><b>${money(sum(['fuel']))}</b></div><div class=st><small>Maintenance</small><b>${money(sum(['maintenance']))}</b></div><div class=st><small>Mileage</small><b>${m.avg?m.avg.toFixed(1)+' km/L':'–'}</b></div>
+ <div class=st><small>This month</small><b>${money(mo)}</b></div><div class=st><small>Cost per km</small><b>${cpk?'₹'+cpk.toFixed(2):'–'}</b></div></div>
+ <div class=card style="margin-top:12px"><div class=hd>Last fuel fill-up</div>${lf?`<div class=grid><div class=st><small>Mileage</small><b>${ls?ls.e.toFixed(1)+' km/L':'–'}</b></div><div class=st><small>Price per litre</small><b>₹${(lf.amt/lf.lit).toFixed(2)}</b></div><div class=st><small>Liters</small><b>${lf.lit} L</b></div><div class=st><small>Amount</small><b>${money(lf.amt)}</b></div></div><p class=sb>${lf.date} · at ${(+lf.odo).toLocaleString('en-IN')} km${ls?' · '+ls.km+' km since previous fill-up':' · log one more fill-up to see mileage'}</p>`:'<p class=sb>Add a fuel entry in Log with km, liters and amount.</p>'}</div>
+ <div class=card><div class=hd>Service reminders</div>${sv.length?sv.map(s=>`<div class=row><div>${esc(s.k)}<div class=sb>${s.kmL!==null?(s.kmL<=0?'Overdue by '+(-s.kmL)+' km':s.kmL+' km left'):''}${s.kmL!==null&&s.dL!==null?' · ':''}${s.dL!==null?(s.dL<=0?'Overdue by '+(-s.dL)+' days':s.dL+' days left'):s.days&&!s.lastDate?'Tap Mark done to start the day count':''}</div></div><span><span class="pill ${s.st}">${s.st==='bad'?'Due now':s.st==='warn'?'Soon':'OK'}</span> <button class=lk data-a=svc data-id=${s.id}>Mark done</button></span></div>`).join(''):'<p class=sb>Add a spec with a km or day interval in Profile to get service reminders.</p>'}</div>
+ <div class=card><div class=hd>Monthly spend</div>${barChart(v)}</div><div class=card><div class=hd>Mileage trend (per fill-up)</div>${lineChart(m.seg)}</div>`},
+add(v){const e=editId&&v.logs.find(l=>l.id===editId)||{},t=e.t||type;
+ return`<div class=card><div class=hd>${e.id?'Edit entry':'Quick log'}${e.id?'<button class=lk data-a=cancel>Cancel</button>':''}</div>
+ <div class=tabs>${Object.entries(TYPES).map(([k,n])=>`<button data-a=tab data-id=${k} class="${k===t?'on':''}">${n}</button>`).join('')}</div>
+ <form data-f=log><input type=hidden name=t value=${t}>
+ <div class=r2><label>Date<input type=date name=date value="${e.date||today()}" required></label><label>Odometer (km)<input type=number name=odo value="${e.odo??odo(v)}" required></label></div>
+ <div class=r2><label>Category<select name=cat>${sel(db.cats[t]||[],e.cat)}</select></label><label>Amount (₹)<input type=number step=.01 min=0 name=amt value="${e.amt??''}" required></label></div>
+ ${t==='fuel'?`<label>Liters (required)<input type=number step=.01 min=0.01 name=lit value="${e.lit||''}" required></label><p class=sb>Fill the tank each time. Mileage = km since your last fill-up ÷ liters.</p>`:''}
+ ${v.partners.length>1?`<div class=r2><label>Paid as<select name=scope><option value=personal ${e.scope!=='shared'?'selected':''}>Personal</option><option value=shared ${e.scope==='shared'?'selected':''}>Shared (split equally)</option></select></label><label>Paid by<select name=payer>${sel(v.partners,e.payer)}</select></label></div>`:''}
+ <label>Note<input name=note value="${esc(e.note||'')}" placeholder="Optional"></label><button class=btn>Save entry</button></form></div>`},
+prof(v){const P=v.partners.join(', ');
+ return`<div class=card><div class=hd>Vehicle details</div><form data-f=veh><div class=r2><label>Name<input name=name value="${esc(v.name)}" required></label><label>Plate<input name=plate value="${esc(v.plate)}"></label></div>
+ <div class=r2><label>Model / variant<input name=model value="${esc(v.model)}"></label><label>Starting odometer<input type=number name=odo0 value="${v.odo0||0}"></label></div>
+ <label>Owners / partners (comma separated, max 4)<input name=partners value="${esc(P)}"></label><button class=btn>Save details</button></form></div>
+ <div class=card><div class=hd>Reminders</div><form data-f=rem class=r2><label>Title<input name=title placeholder="e.g. Water service" required></label><label>Date<input type=date name=date required></label><button class="btn" style="grid-column:1/3">Add reminder</button></form>
+ ${v.rem.map(r=>`<div class=row><div style="${r.done?'text-decoration:line-through;opacity:.6':''}">${esc(r.title)}<div class=sb>${r.date}</div></div><span>${r.done?'':`<button class=lk data-a=rdone data-id=${r.id}>Mark done</button>`}<button class="lk d" data-a=rdel data-id=${r.id}>Delete</button></span></div>`).join('')}</div>
+ <div class=card><div class=hd>Document vault</div><form data-f=doc><div class=r2><label>Type<select name=type>${sel(DOCS)}</select></label><label>Expiry<input type=date name=exp required></label></div>
+ <label>Number<input name=num></label><label>Photo (optional, images only)<input type=file name=img accept="image/jpeg,image/png,image/webp"></label><button class=btn>Save document</button></form>
+ ${v.docs.map(d=>{const n=days(d.exp),c=n<0?'bad':n<=30?'warn':'';return`<div class=row><div>${esc(d.type)} <span class="pill ${c}">${n<0?'Expired':n<=30?n+' days left':'Valid'}</span><div class=sb>${esc(d.num||'')} · ${d.exp}</div></div><span>${d.img?`<button class=lk data-a=view data-id=${d.id}>View</button>`:''}<button class="lk d" data-a=ddel data-id=${d.id}>Delete</button></span></div>`}).join('')}</div>
+ <div class=card><div class=hd>Technical specs <button class=lk data-a=share>Share</button></div><form data-f=spec><div class=r2><label>Group<input name=g placeholder="Engine" required></label><label>Item<input name=k placeholder="Engine oil" required></label></div>
+ <label>Value<input name=v placeholder="5W-30, 3.5 L" required></label><div class=r2><label>Service every (km)<input type=number name=km></label><label>Service every (days)<input type=number name=days></label></div><button class=btn>Add spec</button></form>
+ ${v.specs.map(s=>`<div class=row><div><b>${esc(s.g)}</b> · ${esc(s.k)}<div class=sb>${esc(s.v)}${+s.km?' · every '+s.km+' km':''}${+s.days?' · every '+s.days+' days':''}</div></div><span><button class=lk data-a=sedit data-id=${s.id}>Edit</button><button class="lk d" data-a=sdel data-id=${s.id}>Delete</button></span></div>`).join('')}</div>
+ <div class=card><div class=hd>Gallery</div><form data-f=photo class=r2><label>Zone<select name=zone>${sel(ZONES)}</select></label><label>Photo<input type=file name=img accept="image/jpeg,image/png,image/webp" required></label><button class=btn style="grid-column:1/3">Add photo</button></form>
+ <div class=ph>${Object.entries(v.photos).map(([z,d])=>`<div><img src="${d}" alt="${esc(z)}"><div class=row><span class=sb>${esc(z)}</span><button class="lk d" data-a=pdel data-id="${esc(z)}">Remove</button></div></div>`).join('')}</div></div>
+ <div class=card><div class=hd>Damage log</div><form data-f=dmg><div class=r2><label>Body zone<select name=zone>${sel(ZONES)}</select></label><label>Date<input type=date name=date value="${today()}"></label></div><label>What happened<input name=note required></label><button class=btn>Add damage</button></form>
+ ${v.damages.map(d=>`<div class=row><div>${esc(d.zone)}<div class=sb>${d.date} · ${esc(d.note)}</div></div><span><button class="lk" data-a=dtog data-id=${d.id}>${d.status==='Fixed'?'Fixed':'Pending'}</button><button class="lk d" data-a=dmgdel data-id=${d.id}>Delete</button></span></div>`).join('')}</div>`},
+fin(v){const f=v.fin,L=v.logs,tot=t=>L.filter(l=>l.t===t).reduce((a,l)=>a+ +l.amt,0),emiPaid=(+f.paid||0)*(+f.emi||0),acq=(+f.ex||0)+(+f.tax||0),all=acq+emiPaid+L.reduce((a,l)=>a+ +l.amt,0),net=ledger(v),left=Math.max(0,(+f.ten||0)-(+f.paid||0));
+ return`<div class=card><div class=hd>Purchase & loan</div><form data-f=fin><div class=r2><label>Ex-showroom (₹)<input type=number name=ex value="${f.ex||''}"></label><label>Taxes & registration (₹)<input type=number name=tax value="${f.tax||''}"></label>
+ <label>Down payment (₹)<input type=number name=down value="${f.down||''}"></label><label>Loan amount (₹)<input type=number name=loan value="${f.loan||''}"></label><label>Bank<input name=bank value="${esc(f.bank||'')}"></label><label>Monthly EMI (₹)<input type=number name=emi value="${f.emi||''}"></label>
+ <label>Tenure (months)<input type=number name=ten value="${f.ten||''}"></label><label>EMIs paid<input type=number name=paid value="${f.paid||0}"></label></div><button class=btn>Save finance</button></form></div>
+ <div class=card><div class=hd>Spend summary</div>${[['Purchase & registration',acq],['EMI paid so far',emiPaid],['Fuel',tot('fuel')],['Maintenance',tot('maintenance')],['RTO / buy logs',tot('purchase')],['Expenses',tot('expense')]].map(r=>`<div class=row><span>${r[0]}</span><b>${money(r[1])}</b></div>`).join('')}<div class=row><b>Lifetime total</b><b style="color:var(--ac)">${money(all)}</b></div></div>
+ <div class=card><div class=hd>Loan overview <button class=lk data-a=emi>+ Mark EMI paid</button></div><div class=row><span>${esc(f.bank||'Loan')} · ${money(f.loan)}</span><b>${money(f.emi)}/mo</b></div><div class=row><span>${f.paid||0} paid · ${left} left</span><b>${money(left*(+f.emi||0))} to pay</b></div></div>
+ <div class=card><div class=hd>Partner ledger <button class=lk data-a=settle>Settle up</button></div>${v.partners.length<2?'<p class=sb>Add a second partner in Profile to split shared costs.</p>':Object.entries(net).map(([p,n])=>`<div class=row><span>${esc(p)}</span><b style="color:${n>0.5?'var(--ok)':n<-0.5?'var(--bd)':'var(--sb)'}">${n>0.5?'is owed '+money(n):n<-0.5?'owes '+money(-n):'settled'}</b></div>`).join('')}
+ ${v.settles.map(s=>`<div class=row><span class=sb>Settled on ${s.date}</span><button class="lk d" data-a=undo data-id=${s.id}>Undo</button></div>`).join('')}</div>${PP(v)}`},
+logs(v){return`<div class=card><div class=hd>History <span><button class=lk data-a=csv>CSV</button><button class=lk data-a=pdf>PDF</button></span></div><input id=q placeholder="Search note, category or date" value="${esc(F.q)}">
+ <div class=r2 style="margin-top:8px"><select id=ft><option value=all>All types</option>${Object.entries(TYPES).map(([k,n])=>`<option value=${k} ${F.t===k?'selected':''}>${n}</option>`).join('')}</select><select id=fs><option value=new ${F.s==='new'?'selected':''}>Newest</option><option value=old ${F.s==='old'?'selected':''}>Oldest</option><option value=hi ${F.s==='hi'?'selected':''}>Highest amount</option></select></div></div><div id=lst></div>`}
+};
+function filt(v){let r=v.logs.filter(l=>(F.t==='all'||l.t===F.t)&&(!F.q||[l.note,l.cat,l.date,l.t].join(' ').toLowerCase().includes(F.q.toLowerCase())));
+ return r.sort((a,b)=>F.s==='hi'?b.amt-a.amt:F.s==='old'?a.date.localeCompare(b.date):b.date.localeCompare(a.date))}
+function list(){const v=V(),r=filt(v);$('#lst').innerHTML=`<div class="al ok">${r.length} entries · Total <b>${money(r.reduce((a,l)=>a+ +l.amt,0))}</b></div>`+r.map(l=>`<div class=card><div class=hd><span>${esc(l.cat)} · ${money(l.amt)}</span><span><button class=lk data-a=ledit data-id=${l.id}>Edit</button><button class="lk d" data-a=ldel data-id=${l.id}>Delete</button></span></div><div class=sb>${l.date} · ${TYPES[l.t]} · ${(+l.odo).toLocaleString('en-IN')} km${l.lit?' · '+l.lit+' L @ ₹'+(l.amt/l.lit).toFixed(1):''} · ${v.partners.length>1?' · '+(l.scope==='shared'?'Shared, paid by ':'Personal, ')+esc(l.payer):''}</div>${l.note?`<details><summary class=sb>Note</summary>${esc(l.note)}</details>`:''}</div>`).join('')}
+function setS(){const u=db.user,p=db.pin;
+ return`<div class=card><div class=hd>Categories</div>${Object.keys(TYPES).map(t=>`<div class=sb style="margin-top:8px"><b>${TYPES[t]}</b></div>${(db.cats[t]||[]).map((c,i)=>`<div class=row><span>${esc(c)}</span><span><button class=lk data-a=cedit data-t=${t} data-id=${i}>Edit</button><button class="lk d" data-a=cdel data-t=${t} data-id=${i}>Delete</button></span></div>`).join('')}<form data-f=cat class=r2><input type=hidden name=t value=${t}><input name=n placeholder="New category" required><button class="btn g" style="margin:0">Add</button></form>`).join('')}</div>
+ <div class=card><div class=hd>App lock</div><form data-f=pin><label>${p?'New 6-character PIN':'Set a 6-character PIN (letters and digits)'}<input name=p maxlength=6 pattern="[A-Za-z0-9]{6}" required autocomplete=off></label>
+ <label class=ck style="padding:0 0 8px"><input type=checkbox name=ask ${!p||p.ask!==false?'checked':''}> Ask for PIN every time the app opens</label><button class=btn>${p?'Change PIN':'Turn on PIN lock'}</button></form>${p?'<button class="btn g" data-a=pinoff>Turn off PIN lock</button>':''}</div>
+ <div class=card><div class=hd>Account</div>${u?`<p>Signed in as <b>${esc(u)}</b></p><button class="btn g" data-a=signout>Sign out</button>`:`<p class=sb>You are using the app as a guest. Your data stays on this device. Sign in to use cloud backup.</p><form data-f=auth><label>Email<input type=email name=e required></label><label>Password (min 6)<input type=password name=p minlength=6 required></label><div class=r2><button class=btn name=m value=in>Sign in</button><button class="btn g" name=m value=up>Register</button></div></form>`}</div>
+ <div class=card><div class=hd>Backup</div><p class=sb>Last backup: ${db.lastBackup?new Date(db.lastBackup).toLocaleString():'never'}</p><button class=btn data-a=cbk>Back up to cloud</button><button class="btn g" data-a=crs>Restore from cloud</button><button class="btn g" data-a=jx>Export JSON file</button>
+ <label style="margin-top:8px">Import JSON file<input type=file id=jin accept=".json,application/json"></label></div>`}
+
+/* ---------- render ---------- */
+function render(){const v=V();$('#vsel').innerHTML=db.v.map(x=>`<option value=${x.id} ${x.id===v.id?'selected':''}>${esc(x.name)} ${esc(x.plate)}</option>`).join('');
+ const al=alerts(v),b=$('#bgc');b.textContent=al.length;b.classList.toggle('hide',!al.length);
+ $('#nav').innerHTML=NAV.map(n=>`<button data-a=nav data-id=${n[0]} class="${scr===n[0]?'on':''}"><b>${n[1]}</b>${n[2]}</button>`).join('');
+ $('#main').innerHTML=scr==='set'?setS():S[scr](v);if(scr==='logs')list();scrollTo(0,0)}
+function panel(){const v=V(),al=alerts(v);$('#plist').innerHTML=al.length?al.map(a=>`<div class="al ${a.c}">${esc(a.t)} ${a.rid?`<button class=lk data-a=rdone data-id=${a.rid}>Mark done</button>`:a.sid?`<button class=lk data-a=svc data-id=${a.sid}>Mark done</button>`:''}</div>`).join(''):'<p class=sb>Nothing needs attention right now.</p>';$('#panel').classList.remove('hide')}
+
+/* ---------- Firebase ---------- */
+const FB=()=>fb||(fb=new Promise((ok,no)=>{const c=window.FIREBASE_CONFIG;if(!c||!c.apiKey||/YOUR/.test(c.apiKey))return no(Error('Add your Firebase settings to firebase-config.js first.'));
+ let n=0;['app','auth','database'].forEach(x=>{const s=document.createElement('script');s.src=`https://www.gstatic.com/firebasejs/10.14.1/firebase-${x}-compat.js`;s.onload=()=>{if(++n===3){firebase.initializeApp(c);ok(firebase)}};s.onerror=()=>no(Error('Could not load Firebase. Check your internet connection.'));document.head.appendChild(s)})}));
+const F_=async()=>{try{return await FB()}catch(e){fb=null;throw e}};
+const fuser=async()=>{const f=await F_();return await new Promise(r=>{const u=f.auth().onAuthStateChanged(x=>{u();r(x)})})};
+const guard=fn=>async(...a)=>{try{await fn(...a)}catch(e){alert(e.message||e)}};
+const cloud={
+ auth:guard(async(e,p,m)=>{const f=await F_(),a=f.auth();await(m==='up'?a.createUserWithEmailAndPassword(e,p):a.signInWithEmailAndPassword(e,p));db.user=e;save();toast('Signed in');render()}),
+ out:guard(async()=>{const f=await F_();await f.auth().signOut();db.user=null;save();render()}),
+ bk:guard(async()=>{const u=await fuser();if(!u)throw Error('Sign in first to use cloud backup.');const d=JSON.parse(JSON.stringify(db));delete d.pin;await firebase.database().ref('manskit-backup/'+u.uid).set({...d,_at:Date.now()});db.lastBackup=Date.now();save();toast('Backed up to cloud');render()}),
+ rs:guard(async()=>{const u=await fuser();if(!u)throw Error('Sign in first to use cloud backup.');const s=await firebase.database().ref('manskit-backup/'+u.uid).get();if(!s.exists())throw Error('No cloud backup found for this account.');
+  if(!confirm('Restoring replaces the data on this device. Continue?'))return;const d=fix(s.val()),pin=db.pin,usr=db.user;db=d;db.pin=pin;db.user=usr;db.lastBackup=Date.now();if(!db.v.find(x=>x.id===db.act))db.act=db.v[0].id;save();toast('Restored');render()})};
+
+/* ---------- actions ---------- */
+const dl=(name,txt,mime)=>{const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([txt],{type:mime}));a.download=name;a.click()};
+const A={
+ nav:id=>{scr=id;if(id!=='add')editId=null;render()},tab:id=>{type=id;render()},cancel:()=>{editId=null;scr='logs';render()},close:()=>$('#panel').classList.add('hide'),
+ svc:id=>{const s=V().specs.find(x=>x.id===id);s.lastOdo=odo(V());s.lastDate=today();save();render();if(!$('#panel').classList.contains('hide'))panel()},
+ rdone:id=>{V().rem.find(x=>x.id===id).done=true;save();render();if(!$('#panel').classList.contains('hide'))panel()},
+ rdel:id=>{V().rem=V().rem.filter(x=>x.id!==id);save();render()},
+ ddel:id=>confirm('Delete this document?')&&(V().docs=V().docs.filter(x=>x.id!==id),save(),render()),
+ view:id=>{const d=V().docs.find(x=>x.id===id);open().document.write(`<img src="${d.img}" style="max-width:100%">`)},
+ sdel:id=>confirm('Delete this spec?')&&(V().specs=V().specs.filter(x=>x.id!==id),save(),render()),
+ sedit:id=>{const s=V().specs.find(x=>x.id===id),n=prompt('Value for '+s.k,s.v);if(n){s.v=n;save();render()}},
+ share:()=>{const v=V(),g={};v.specs.forEach(s=>(g[s.g]=g[s.g]||[]).push(`${s.k}: ${s.v}`));const t=`${v.name} ${v.plate}\n${v.model}\n\n`+Object.entries(g).map(([k,a])=>k+'\n'+a.join('\n')).join('\n\n');
+  navigator.share?navigator.share({title:v.name,text:t}).catch(()=>{}):navigator.clipboard.writeText(t).then(()=>toast('Copied to clipboard'))},
+ pdel:id=>{delete V().photos[id];save();render()},dtog:id=>{const d=V().damages.find(x=>x.id===id);d.status=d.status==='Fixed'?'Pending':'Fixed';save();render()},
+ dmgdel:id=>{V().damages=V().damages.filter(x=>x.id!==id);save();render()},
+ emi:()=>{const f=V().fin;f.paid=(+f.paid||0)+1;save();render()},
+ settle:()=>{const v=V(),n=ledger(v);if(Object.values(n).every(x=>Math.abs(x)<.5))return toast('Already settled');if(confirm('Record a settlement and reset the balance to ₹0?')){v.settles.push({id:uid(),date:today(),net:n});save();render()}},
+ undo:id=>{V().settles=V().settles.filter(x=>x.id!==id);save();render()},
+ ledit:id=>{editId=id;scr='add';render()},ldel:id=>confirm('Delete this entry?')&&(V().logs=V().logs.filter(x=>x.id!==id),save(),render()),
+ csv:()=>{const v=V(),q=s=>'"'+String(s??'').replace(/"/g,'""')+'"';dl(v.name+'-logs.csv',['Date,Type,Category,Amount,Odometer,Liters,Paid as,Paid by,Note',...filt(v).map(l=>[l.date,l.t,l.cat,l.amt,l.odo,l.lit,l.scope,l.payer,l.note].map(q).join(','))].join('\n'),'text/csv')},
+ pdf:()=>{const v=V(),r=filt(v),w=open('','_blank');if(!w)return alert('Allow pop-ups to save a PDF.');w.document.write(`<title>${esc(v.name)} history</title><style>body{font:12px sans-serif}table{border-collapse:collapse;width:100%}td,th{border:1px solid #999;padding:4px;text-align:left}</style><h2>${esc(v.name)} ${esc(v.plate)}</h2><table><tr><th>Date<th>Type<th>Category<th>Amount<th>Odo<th>Note</tr>${r.map(l=>`<tr><td>${l.date}<td>${TYPES[l.t]}<td>${esc(l.cat)}<td>${l.amt}<td>${l.odo}<td>${esc(l.note)}</tr>`).join('')}</table><p><b>Total: ${money(r.reduce((a,l)=>a+ +l.amt,0))}</b></p>`);w.document.close();w.print()},
+ cedit:(id,b)=>{const t=b.dataset.t,n=prompt('Rename category',db.cats[t][id]);if(n&&n.trim()){db.cats[t][id]=n.trim();save();render()}},
+ cdel:(id,b)=>{const t=b.dataset.t;confirm('Delete "'+db.cats[t][id]+'"?')&&(db.cats[t].splice(id,1),save(),render())},
+ pinoff:()=>{db.pin=null;localStorage.removeItem('mk_ok');save();render()},signout:()=>confirm('Sign out?')&&cloud.out(),cbk:()=>cloud.bk(),crs:()=>cloud.rs(),
+ jx:()=>{const d=JSON.parse(JSON.stringify(db));delete d.pin;dl('manskit-backup-'+today()+'.json',JSON.stringify(d),'application/json');db.lastBackup=Date.now();save();render()}
+};
+document.addEventListener('click',e=>{const b=e.target.closest('[data-a]');if(b)A[b.dataset.a]?.(b.dataset.id,b)});
+$('#bell').onclick=panel;
+$('#vsel').onchange=e=>{db.act=e.target.value;save();render()};
+$('#vadd').onclick=()=>{const n=prompt('Vehicle name');if(!n)return;const v=newV(n,(prompt('Plate number (optional)')||'').toUpperCase());db.v.push(v);db.act=v.id;save();scr='prof';render()};
+$('#vdel').onclick=()=>{if(db.v.length<2)return alert('Keep at least one vehicle.');const v=V();if(confirm(`Delete ${v.name} and all its data?`)){db.v=db.v.filter(x=>x!==v);db.act=db.v[0].id;save();render()}};
+document.addEventListener('input',e=>{if(e.target.id==='q'){F.q=e.target.value;list()}});
+document.addEventListener('change',e=>{if(e.target.id==='ft'){F.t=e.target.value;list()}if(e.target.id==='fs'){F.s=e.target.value;list()}
+ if(e.target.id==='jin'){const f=e.target.files[0];if(!f)return;if(!/\.json$/i.test(f.name))return alert('Only .json backup files are accepted.');f.text().then(t=>{try{const d=JSON.parse(t);if(!d.v)throw 0;if(!confirm('Importing replaces the data on this device. Continue?'))return;const pin=db.pin,u=db.user;db=fix(d);db.pin=pin;db.user=u;if(!db.v.find(x=>x.id===db.act))db.act=db.v[0].id;save();render();toast('Imported')}catch(x){alert('This is not a valid MANSKIT backup file.')}})}});
+const hash=async p=>{const s='mk|'+p;if(!crypto.subtle)return btoa(s);return[...new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(s)))].map(x=>x.toString(16).padStart(2,'0')).join('')};
+const FORM={
+ log(o,v){const e={t:o.t,date:o.date,odo:+o.odo,cat:o.cat,amt:+o.amt,lit:+o.lit||0,full:o.t==='fuel',scope:o.scope||'personal',payer:o.payer||v.partners[0],note:o.note};
+  if(editId){Object.assign(v.logs.find(l=>l.id===editId),e);editId=null}else v.logs.push({id:uid(),...e});save();toast('Saved');scr='logs';render()},
+ veh(o,v){Object.assign(v,{name:o.name,plate:o.plate.toUpperCase(),model:o.model,odo0:+o.odo0||0});const p=o.partners.split(',').map(s=>s.trim()).filter(Boolean).slice(0,4);v.partners=p.length?p:['You'];save();toast('Saved');render()},
+ rem(o,v){v.rem.push({id:uid(),title:o.title,date:o.date,done:false});save();render()},
+ spec(o,v){v.specs.push({id:uid(),g:o.g,k:o.k,v:o.v,km:+o.km||0,days:+o.days||0});save();render()},
+ dmg(o,v){v.damages.push({id:uid(),zone:o.zone,note:o.note,date:o.date,status:'Pending'});save();render()},
+ fin(o,v){v.fin={ex:+o.ex||0,tax:+o.tax||0,down:+o.down||0,loan:+o.loan||0,bank:o.bank,emi:+o.emi||0,ten:+o.ten||0,paid:+o.paid||0};save();toast('Saved');render()},
+ cat(o){db.cats[o.t].push(o.n.trim());save();render()},
+ async doc(o,v,f){const d={id:uid(),type:o.type,num:o.num,exp:o.exp};if(f.get('img').size)d.img=await pic(f.get('img'));v.docs.push(d);save();render()},
+ async photo(o,v,f){v.photos[o.zone]=await pic(f.get('img'));save();render()},
+ async pin(o){if(!/^[A-Za-z0-9]{6}$/.test(o.p))return alert('The PIN must be exactly 6 letters or digits.');const h=await hash(o.p);db.pin={h,ask:!!o.ask};if(db.pin.ask)localStorage.removeItem('mk_ok');else localStorage.setItem('mk_ok',h);save();toast('PIN lock is on');render()},
+ auth(o,v,f,ev){cloud.auth(o.e,o.p,ev.submitter?.value||'in')}};
+document.addEventListener('submit',async e=>{e.preventDefault();const f=new FormData(e.target),k=e.target.dataset.f;try{await FORM[k](Object.fromEntries(f),V(),f,e)}catch(x){alert(x.message||x)}});
+
+/* ---------- lock ---------- */
+function start(){render()}
+function lockCheck(){const p=db.pin;if(p&&!(p.ask===false&&localStorage.getItem('mk_ok')===p.h)){$('#lock').classList.remove('hide');$('#pin').focus()}else start()}
+$('#unlock').onclick=async()=>{const h=await hash($('#pin').value);if(h===db.pin.h){if(db.pin.ask===false)localStorage.setItem('mk_ok',h);$('#lock').classList.add('hide');$('#pin').value='';start()}else $('#pinerr').textContent='Wrong PIN. Try again.'};
+$('#pin').onkeydown=e=>e.key==='Enter'&&$('#unlock').click();
+$('#forgot').onclick=guard(async()=>{if(!db.user)return alert('PIN reset needs an account. You are in guest mode, so the only way to remove the lock is to clear this app\'s site data (this erases local data).');
+ const p=prompt('Enter the password for '+db.user+' to remove the PIN');if(!p)return;const f=await F_();await f.auth().signInWithEmailAndPassword(db.user,p);db.pin=null;localStorage.removeItem('mk_ok');save();$('#lock').classList.add('hide');start();toast('PIN removed. Set a new one in Settings.')});
+lockCheck();
