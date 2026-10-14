@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<meta name="theme-color" content="#0d1117"><title>MANSKIT Vehicle Hub</title>
+<meta name="theme-color" content="#0d1117"><title>VehicleHub</title>
 <link rel="manifest" href="manifest.json"><link rel="apple-touch-icon" href="icons/icon-192.png">
 <style>
 :root{--bg:#0d1117;--pn:#161c26;--ln:#263041;--tx:#e8edf5;--sb:#8b97aa;--ac:#f5a623;--ok:#2dd4bf;--wr:#f5a623;--bd:#ef4444}
@@ -42,10 +42,10 @@ nav button{flex:1;background:none;border:0;padding:8px 0;font-size:11px;color:va
 #lock{position:fixed;inset:0;background:var(--bg);z-index:50;display:flex;align-items:center;justify-content:center;padding:24px}#lock>div{width:100%;max-width:320px;text-align:center}
 #lock input{text-align:center;font-size:24px;letter-spacing:8px}
 </style></head><body>
-<div id="lock" class="hide"><div><div class="brand" style="font-size:22px">MANSKIT</div><p class="sb">Enter your 6-character PIN</p>
+<div id="lock" class="hide"><div><div class="brand" style="font-size:22px">VehicleHub</div><p class="sb">Enter your 6-character PIN</p>
 <input id="pin" maxlength="6" autocomplete="off" autocapitalize="off"><p id="pinerr" class="sb" style="color:var(--bd)"></p>
 <button class="btn" id="unlock">Unlock</button><button class="lk" id="forgot">Forgot PIN?</button></div></div>
-<header><div class="top"><span class="brand"><svg class="logo" viewBox="0 0 48 48" aria-hidden="true"><rect width="48" height="48" rx="11" fill="#f5a623"/><path d="M8 30v-5l5-2 5-7h12l6 7 4 2v5z" fill="#0d1117"/><circle cx="16" cy="32" r="4.5" fill="#0d1117" stroke="#f5a623" stroke-width="2"/><circle cx="34" cy="32" r="4.5" fill="#0d1117" stroke="#f5a623" stroke-width="2"/></svg>MANSKIT</span><select id="vsel" aria-label="Vehicle"></select>
+<header><div class="top"><span class="brand"><svg class="logo" viewBox="0 0 48 48" aria-hidden="true"><rect width="48" height="48" rx="11" fill="#f5a623"/><path d="M8 30v-5l5-2 5-7h12l6 7 4 2v5z" fill="#0d1117"/><circle cx="16" cy="32" r="4.5" fill="#0d1117" stroke="#f5a623" stroke-width="2"/><circle cx="34" cy="32" r="4.5" fill="#0d1117" stroke="#f5a623" stroke-width="2"/></svg>VehicleHub</span><select id="vsel" aria-label="Vehicle"></select>
 <button class="ib" id="bell" aria-label="Notifications">🔔<span class="bg hide" id="bgc"></span></button>
 <button class="ib" id="vadd" aria-label="Add vehicle">＋</button><button class="ib" id="vdel" aria-label="Delete vehicle">🗑</button></div>
 <div class="road" aria-hidden="true"><svg class="sgn" viewBox="0 0 18 40"><rect x="8" y="14" width="2" height="26" fill="#8b97aa"/><circle cx="9" cy="8" r="7" fill="#fff" stroke="#ef4444" stroke-width="2"/><text x="9" y="11" font-size="8" font-weight="700" text-anchor="middle" fill="#111">40</text></svg><svg class="sig" viewBox="0 0 14 40"><rect x="6" y="22" width="2" height="18" fill="#8b97aa"/><rect x="1" y="0" width="12" height="24" rx="3" fill="#0d1117" stroke="#8b97aa"/><circle class="lr" cx="7" cy="5.5" r="3" fill="#ef4444"/><circle class="ly" cx="7" cy="12" r="3" fill="#f5a623"/><circle class="lg" cx="7" cy="18.5" r="3" fill="#2dd4bf"/></svg><svg class="car" viewBox="0 0 64 32"><circle class="sm" cx="2" cy="22" r="2" fill="#8b97aa"/><circle class="sm" cx="2" cy="22" r="2" fill="#8b97aa" style="animation-delay:.6s"/><circle class="sm" cx="2" cy="22" r="2" fill="#8b97aa" style="animation-delay:1.2s"/><g class="bob"><path d="M3 22v-6l9-2 8-8h22l10 8 9 2v6z" fill="#f5a623"/><path d="M23 9h8v6H17zm10 0h9l7 6H33z" fill="#0d1117" opacity=".75"/><g class="wh"><circle cx="17" cy="24" r="6" fill="#0d1117" stroke="#e8edf5" stroke-width="2"/><path d="M17 19v10M12 24h10" stroke="#8b97aa" stroke-width="1.5"/></g><g class="wh"><circle cx="47" cy="24" r="6" fill="#0d1117" stroke="#e8edf5" stroke-width="2"/><path d="M47 19v10M42 24h10" stroke="#8b97aa" stroke-width="1.5"/></g></g></svg></div></header>

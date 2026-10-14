@@ -10,10 +10,10 @@ const DOCS=['RC','Insurance','PUC','Driving License','Other'];
 const DEF={fuel:['Petrol','Diesel','CNG','EV charging'],maintenance:['Oil change','Tyres','Brakes','Battery','General service'],purchase:['RTO & registration','Insurance premium','Accessories','Loan fee'],expense:['Toll','Parking','Car wash','Fine']};
 const NAV=[['home','⌂','Home'],['add','＋','Log'],['prof','🚘','Profile'],['fin','₹','Finance'],['logs','☰','History'],['set','⚙','Settings']];
 const sel=(a,o)=>a.map(i=>`<option ${i===o?'selected':''}>${esc(i)}</option>`).join('');
-let scr='home',type='fuel',editId=null,fb=null,F={q:'',t:'all',s:'new'};
+let scr='home',type='fuel',editId=null,fb=null,emiEdit=null,F={q:'',t:'all',s:'new'};
 
-const newV=(name,plate)=>({id:uid(),name,plate,model:'',odo0:0,partners:['You','Partner'],specs:[],docs:[],photos:{},damages:[],logs:[],fin:{},settles:[],rem:[]});
-function fix(d){d.v.forEach(v=>{['specs','docs','damages','logs','settles','rem'].forEach(k=>v[k]=Object.values(v[k]||{}));v.photos=v.photos||{};v.fin=v.fin||{};v.partners=Object.values(v.partners||['You'])});d.cats=d.cats||DEF;return d}
+const newV=(name,plate)=>({id:uid(),name,plate,model:'',odo0:0,partners:['You','Partner'],specs:[],docs:[],photos:{},damages:[],logs:[],fin:{pays:[]},settles:[],rem:[]});
+function fix(d){d.v.forEach(v=>{['specs','docs','damages','logs','settles','rem'].forEach(k=>v[k]=Object.values(v[k]||{}));v.photos=v.photos||{};v.fin=v.fin||{};v.fin.pays=Object.values(v.fin.pays||{});v.partners=Object.values(v.partners||['You'])});d.cats=d.cats||DEF;return d}
 function load(){try{const d=JSON.parse(localStorage.getItem(LS));if(d&&d.v)return fix(d)}catch(e){}const v=newV('My Vehicle','');return{v:[v],act:v.id,cats:DEF,pin:null,lastBackup:null,user:null}}
 let db=load();
 const save=()=>{try{localStorage.setItem(LS,JSON.stringify(db))}catch(e){alert('Storage is full. Export a JSON backup, then remove old photos.')}};
@@ -85,12 +85,14 @@ prof(v){const P=v.partners.join(', ');
  <div class=ph>${Object.entries(v.photos).map(([z,d])=>`<div><img src="${d}" alt="${esc(z)}"><div class=row><span class=sb>${esc(z)}</span><button class="lk d" data-a=pdel data-id="${esc(z)}">Remove</button></div></div>`).join('')}</div></div>
  <div class=card><div class=hd>Damage log</div><form data-f=dmg><div class=r2><label>Body zone<select name=zone>${sel(ZONES)}</select></label><label>Date<input type=date name=date value="${today()}"></label></div><label>What happened<input name=note required></label><button class=btn>Add damage</button></form>
  ${v.damages.map(d=>`<div class=row><div>${esc(d.zone)}<div class=sb>${d.date} · ${esc(d.note)}</div></div><span><button class="lk" data-a=dtog data-id=${d.id}>${d.status==='Fixed'?'Fixed':'Pending'}</button><button class="lk d" data-a=dmgdel data-id=${d.id}>Delete</button></span></div>`).join('')}</div>`},
-fin(v){const f=v.fin,L=v.logs,tot=t=>L.filter(l=>l.t===t).reduce((a,l)=>a+ +l.amt,0),emiPaid=(+f.paid||0)*(+f.emi||0),acq=(+f.ex||0)+(+f.tax||0),all=acq+emiPaid+L.reduce((a,l)=>a+ +l.amt,0),net=ledger(v),left=Math.max(0,(+f.ten||0)-(+f.paid||0));
+fin(v){const f=v.fin,pays=f.pays||[],L=v.logs,tot=t=>L.filter(l=>l.t===t).reduce((a,l)=>a+ +l.amt,0),emiPaid=(+f.paid||0)*(+f.emi||0)+pays.reduce((x,p)=>x+ +p.amt,0),acq=(+f.ex||0)+(+f.tax||0),all=acq+emiPaid+L.reduce((a,l)=>a+ +l.amt,0),net=ledger(v),left=Math.max(0,(+f.ten||0)-(+f.paid||0)-pays.length),ee=emiEdit&&pays.find(p=>p.id===emiEdit);
  return`<div class=card><div class=hd>Purchase & loan</div><form data-f=fin><div class=r2><label>Ex-showroom (₹)<input type=number name=ex value="${f.ex||''}"></label><label>Taxes & registration (₹)<input type=number name=tax value="${f.tax||''}"></label>
  <label>Down payment (₹)<input type=number name=down value="${f.down||''}"></label><label>Loan amount (₹)<input type=number name=loan value="${f.loan||''}"></label><label>Bank<input name=bank value="${esc(f.bank||'')}"></label><label>Monthly EMI (₹)<input type=number name=emi value="${f.emi||''}"></label>
- <label>Tenure (months)<input type=number name=ten value="${f.ten||''}"></label><label>EMIs paid<input type=number name=paid value="${f.paid||0}"></label></div><button class=btn>Save finance</button></form></div>
+ <label>Tenure (months)<input type=number name=ten value="${f.ten||''}"></label><label>EMIs paid before this app<input type=number name=paid value="${f.paid||0}"></label></div><button class=btn>Save finance</button></form></div>
  <div class=card><div class=hd>Spend summary</div>${[['Purchase & registration',acq],['EMI paid so far',emiPaid],['Fuel',tot('fuel')],['Maintenance',tot('maintenance')],['RTO / buy logs',tot('purchase')],['Expenses',tot('expense')]].map(r=>`<div class=row><span>${r[0]}</span><b>${money(r[1])}</b></div>`).join('')}<div class=row><b>Lifetime total</b><b style="color:var(--ac)">${money(all)}</b></div></div>
- <div class=card><div class=hd>Loan overview <button class=lk data-a=emi>+ Mark EMI paid</button></div><div class=row><span>${esc(f.bank||'Loan')} · ${money(f.loan)}</span><b>${money(f.emi)}/mo</b></div><div class=row><span>${f.paid||0} paid · ${left} left</span><b>${money(left*(+f.emi||0))} to pay</b></div></div>
+ <div class=card><div class=hd>Loan overview</div><div class=row><span>${esc(f.bank||'Loan')} · ${money(f.loan)}</span><b>${money(f.emi)}/mo</b></div><div class=row><span>${(+f.paid||0)+pays.length} paid · ${left} left</span><b>${money(left*(+f.emi||0))} to pay</b></div></div>
+ <div class=card><div class=hd>EMI payments${ee?'<button class=lk data-a=emicancel>Cancel</button>':''}</div><form data-f=emi><div class=r2><label>Date<input type=date name=date value="${ee?ee.date:today()}" required></label><label>Amount (₹)<input type=number step=.01 min=0 name=amt value="${ee?ee.amt:(f.emi||'')}" required></label></div><label>Note<input name=note value="${esc(ee?ee.note:'')}" placeholder="Optional"></label><button class=btn>${ee?'Update EMI':'Add EMI payment'}</button></form>
+ ${pays.slice().sort((x,y)=>y.date.localeCompare(x.date)).map(p=>`<div class=row><div>${money(p.amt)}<div class=sb>${p.date}${p.note?' · '+esc(p.note):''}</div></div><span><button class=lk data-a=emiedit data-id=${p.id}>Edit</button><button class="lk d" data-a=emidel data-id=${p.id}>Delete</button></span></div>`).join('')}</div>
  <div class=card><div class=hd>Partner ledger <button class=lk data-a=settle>Settle up</button></div>${v.partners.length<2?'<p class=sb>Add a second partner in Profile to split shared costs.</p>':Object.entries(net).map(([p,n])=>`<div class=row><span>${esc(p)}</span><b style="color:${n>0.5?'var(--ok)':n<-0.5?'var(--bd)':'var(--sb)'}">${n>0.5?'is owed '+money(n):n<-0.5?'owes '+money(-n):'settled'}</b></div>`).join('')}
  ${v.settles.map(s=>`<div class=row><span class=sb>Settled on ${s.date}</span><button class="lk d" data-a=undo data-id=${s.id}>Undo</button></div>`).join('')}</div>${PP(v)}`},
 logs(v){return`<div class=card><div class=hd>History <span><button class=lk data-a=csv>CSV</button><button class=lk data-a=pdf>PDF</button></span></div><input id=q placeholder="Search note, category or date" value="${esc(F.q)}">
@@ -142,7 +144,7 @@ const A={
   navigator.share?navigator.share({title:v.name,text:t}).catch(()=>{}):navigator.clipboard.writeText(t).then(()=>toast('Copied to clipboard'))},
  pdel:id=>{delete V().photos[id];save();render()},dtog:id=>{const d=V().damages.find(x=>x.id===id);d.status=d.status==='Fixed'?'Pending':'Fixed';save();render()},
  dmgdel:id=>{V().damages=V().damages.filter(x=>x.id!==id);save();render()},
- emi:()=>{const f=V().fin;f.paid=(+f.paid||0)+1;save();render()},
+ emiedit:id=>{emiEdit=id;render();$('[data-f=emi]').scrollIntoView()},emicancel:()=>{emiEdit=null;render()},emidel:id=>confirm('Delete this EMI payment?')&&(V().fin.pays=V().fin.pays.filter(p=>p.id!==id),save(),render()),
  settle:()=>{const v=V(),n=ledger(v);if(Object.values(n).every(x=>Math.abs(x)<.5))return toast('Already settled');if(confirm('Record a settlement and reset the balance to ₹0?')){v.settles.push({id:uid(),date:today(),net:n});save();render()}},
  undo:id=>{V().settles=V().settles.filter(x=>x.id!==id);save();render()},
  ledit:id=>{editId=id;scr='add';render()},ldel:id=>confirm('Delete this entry?')&&(V().logs=V().logs.filter(x=>x.id!==id),save(),render()),
@@ -151,7 +153,7 @@ const A={
  cedit:(id,b)=>{const t=b.dataset.t,n=prompt('Rename category',db.cats[t][id]);if(n&&n.trim()){db.cats[t][id]=n.trim();save();render()}},
  cdel:(id,b)=>{const t=b.dataset.t;confirm('Delete "'+db.cats[t][id]+'"?')&&(db.cats[t].splice(id,1),save(),render())},
  pinoff:()=>{db.pin=null;localStorage.removeItem('mk_ok');save();render()},signout:()=>confirm('Sign out?')&&cloud.out(),cbk:()=>cloud.bk(),crs:()=>cloud.rs(),
- jx:()=>{const d=JSON.parse(JSON.stringify(db));delete d.pin;dl('manskit-backup-'+today()+'.json',JSON.stringify(d),'application/json');db.lastBackup=Date.now();save();render()}
+ jx:()=>{const d=JSON.parse(JSON.stringify(db));delete d.pin;dl('vehiclehub-backup-'+today()+'.json',JSON.stringify(d),'application/json');db.lastBackup=Date.now();save();render()}
 };
 document.addEventListener('click',e=>{const b=e.target.closest('[data-a]');if(b)A[b.dataset.a]?.(b.dataset.id,b)});
 $('#bell').onclick=panel;
@@ -160,7 +162,7 @@ $('#vadd').onclick=()=>{const n=prompt('Vehicle name');if(!n)return;const v=newV
 $('#vdel').onclick=()=>{if(db.v.length<2)return alert('Keep at least one vehicle.');const v=V();if(confirm(`Delete ${v.name} and all its data?`)){db.v=db.v.filter(x=>x!==v);db.act=db.v[0].id;save();render()}};
 document.addEventListener('input',e=>{if(e.target.id==='q'){F.q=e.target.value;list()}});
 document.addEventListener('change',e=>{if(e.target.id==='ft'){F.t=e.target.value;list()}if(e.target.id==='fs'){F.s=e.target.value;list()}
- if(e.target.id==='jin'){const f=e.target.files[0];if(!f)return;if(!/\.json$/i.test(f.name))return alert('Only .json backup files are accepted.');f.text().then(t=>{try{const d=JSON.parse(t);if(!d.v)throw 0;if(!confirm('Importing replaces the data on this device. Continue?'))return;const pin=db.pin,u=db.user;db=fix(d);db.pin=pin;db.user=u;if(!db.v.find(x=>x.id===db.act))db.act=db.v[0].id;save();render();toast('Imported')}catch(x){alert('This is not a valid MANSKIT backup file.')}})}});
+ if(e.target.id==='jin'){const f=e.target.files[0];if(!f)return;if(!/\.json$/i.test(f.name))return alert('Only .json backup files are accepted.');f.text().then(t=>{try{const d=JSON.parse(t);if(!d.v)throw 0;if(!confirm('Importing replaces the data on this device. Continue?'))return;const pin=db.pin,u=db.user;db=fix(d);db.pin=pin;db.user=u;if(!db.v.find(x=>x.id===db.act))db.act=db.v[0].id;save();render();toast('Imported')}catch(x){alert('This is not a valid VehicleHub backup file.')}})}});
 const hash=async p=>{const s='mk|'+p;if(!crypto.subtle)return btoa(s);return[...new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(s)))].map(x=>x.toString(16).padStart(2,'0')).join('')};
 const FORM={
  log(o,v){const e={t:o.t,date:o.date,odo:+o.odo,cat:o.cat,amt:+o.amt,lit:+o.lit||0,full:o.t==='fuel',scope:o.scope||'personal',payer:o.payer||v.partners[0],note:o.note};
@@ -169,7 +171,8 @@ const FORM={
  rem(o,v){v.rem.push({id:uid(),title:o.title,date:o.date,done:false});save();render()},
  spec(o,v){v.specs.push({id:uid(),g:o.g,k:o.k,v:o.v,km:+o.km||0,days:+o.days||0});save();render()},
  dmg(o,v){v.damages.push({id:uid(),zone:o.zone,note:o.note,date:o.date,status:'Pending'});save();render()},
- fin(o,v){v.fin={ex:+o.ex||0,tax:+o.tax||0,down:+o.down||0,loan:+o.loan||0,bank:o.bank,emi:+o.emi||0,ten:+o.ten||0,paid:+o.paid||0};save();toast('Saved');render()},
+ fin(o,v){v.fin={pays:v.fin.pays||[],ex:+o.ex||0,tax:+o.tax||0,down:+o.down||0,loan:+o.loan||0,bank:o.bank,emi:+o.emi||0,ten:+o.ten||0,paid:+o.paid||0};save();toast('Saved');render()},
+ emi(o,v){const f=v.fin;f.pays=f.pays||[];if(emiEdit){Object.assign(f.pays.find(p=>p.id===emiEdit),{date:o.date,amt:+o.amt,note:o.note});emiEdit=null}else f.pays.push({id:uid(),date:o.date,amt:+o.amt,note:o.note});save();toast('Saved');render()},
  cat(o){db.cats[o.t].push(o.n.trim());save();render()},
  async doc(o,v,f){const d={id:uid(),type:o.type,num:o.num,exp:o.exp};if(f.get('img').size)d.img=await pic(f.get('img'));v.docs.push(d);save();render()},
  async photo(o,v,f){v.photos[o.zone]=await pic(f.get('img'));save();render()},
