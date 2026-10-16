@@ -1,11 +1,9 @@
-// Paste your Firebase web app settings here (Firebase console > Project settings > Your apps).
-// Enable Authentication > Email/Password and create a Realtime Database first.
+// Paste the values from Firebase console > Project settings > Your apps > SDK setup and configuration > Config.
+// databaseURL must be the exact URL shown at the top of Build > Realtime Database > Data.
 window.FIREBASE_CONFIG = {
   apiKey: "YOUR_API_KEY",
   authDomain: "YOUR_PROJECT.firebaseapp.com",
-  databaseURL: "https://YOUR_PROJECT-default-rtdb.firebaseio.com",
+  databaseURL: "YOUR_DATABASE_URL",
   projectId: "YOUR_PROJECT",
   appId: "YOUR_APP_ID"
 };
-// Database rules (Realtime Database > Rules):
-// { "rules": { "manskit-backup": { "$uid": { ".read": "auth.uid === $uid", ".write": "auth.uid === $uid" } } } }
