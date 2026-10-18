@@ -12,11 +12,13 @@ const NAV=[['home','⌂','Home'],['add','＋','Log'],['prof','🚘','Profile'],[
 const sel=(a,o)=>a.map(i=>`<option ${i===o?'selected':''}>${esc(i)}</option>`).join('');
 let scr='home',type='fuel',editId=null,fb=null,emiEdit=null,F={q:'',t:'all',s:'new'};
 
+let TM={users:[],sent:{},remote:{},on:false};
 const newV=(name,plate)=>({id:uid(),name,plate,model:'',odo0:0,partners:['You','Partner'],specs:[],docs:[],photos:{},damages:[],logs:[],fin:{pays:[]},settles:[],rem:[]});
 function fix(d){d.v.forEach(v=>{['specs','docs','damages','logs','settles','rem'].forEach(k=>v[k]=Object.values(v[k]||{}));v.photos=v.photos||{};v.fin=v.fin||{};v.fin.pays=Object.values(v.fin.pays||{});v.partners=Object.values(v.partners||['You'])});d.cats=d.cats||DEF;return d}
 function load(){try{const d=JSON.parse(localStorage.getItem(LS));if(d&&d.v){fix(d);if(!d.m7){d.m7=1;d.cats.maintenance=d.cats.maintenance||[];['Water service','Air check'].forEach(c=>d.cats.maintenance.includes(c)||d.cats.maintenance.push(c))}return d}}catch(e){}const v=newV('My Vehicle','');return{v:[v],act:v.id,cats:DEF,m7:1,pin:null,lastBackup:null,user:null}}
 let db=load();
-const save=()=>{try{localStorage.setItem(LS,JSON.stringify(db))}catch(e){alert('Storage is full. Export a JSON backup, then remove old photos.')}};
+const lsave=()=>{try{localStorage.setItem(LS,JSON.stringify(db))}catch(e){alert('Storage is full. Export a JSON backup, then remove old photos.')}};
+const save=()=>{lsave();push()};
 const V=()=>db.v.find(x=>x.id===db.act)||db.v[0];
 function toast(t){const e=$('#toast');e.textContent=t;e.classList.remove('hide');setTimeout(()=>e.classList.add('hide'),2200)}
 
@@ -40,6 +42,7 @@ function alerts(v){const a=[];
  v.rem.filter(r=>!r.done).forEach(r=>{const n=days(r.date);if(n<=7)a.push({c:n<0?'bad':'warn',t:`${r.title} ${n<0?'is overdue':n===0?'is due today':'is due in '+n+' days'}`,rid:r.id})});
  due(v).filter(s=>s.st!=='ok').forEach(s=>a.push({c:s.st,t:`${s.k} service ${s.st==='bad'?'is due now':'is due soon'}`,sid:s.id}));
  if(v.logs.length&&(!db.lastBackup||Date.now()-db.lastBackup>7*864e5))a.push({c:'warn',t:'Your last backup is over 7 days old. Export JSON or back up to the cloud.'});
+ if(TM.role==='admin'&&TM.status==='approved'){const n=TM.users.filter(u=>u.status==='pending').length;if(n)a.push({c:'warn',t:`${n} join request${n>1?'s are':' is'} waiting for your approval (Settings, Team)`})}
  return a}
 
 /* ---------- images (images only, compressed) ---------- */
@@ -130,28 +133,67 @@ function setS(){const u=db.user,p=db.pin;
  <div class=card><div class=hd>App lock</div><form data-f=pin><label>${p?'New 6-character PIN':'Set a 6-character PIN (letters and digits)'}<input name=p maxlength=6 pattern="[A-Za-z0-9]{6}" required autocomplete=off></label>
  <label class=ck style="padding:0 0 8px"><input type=checkbox name=ask ${!p||p.ask!==false?'checked':''}> Ask for PIN every time the app opens</label><button class=btn>${p?'Change PIN':'Turn on PIN lock'}</button></form>${p?'<button class="btn g" data-a=pinoff>Turn off PIN lock</button>':''}</div>
  <div class=card><div class=hd>Account</div>${u?`<p>Signed in as <b>${esc(u)}</b></p><button class="btn g" data-a=signout>Sign out</button>`:`<p class=sb>You are using the app as a guest. Your data stays on this device. Sign in to use cloud backup.</p><form data-f=auth><label>Email<input type=email name=e required></label><label>Password (min 6)<input type=password name=p minlength=6 required></label><div class=r2><button class=btn name=m value=in>Sign in</button><button class="btn g" name=m value=up>Register</button></div><button type=button class=lk data-a=pwreset>Forgot password?</button></form>`}</div>
- <div class=card><div class=hd>Backup</div><p class=sb>Last backup: ${db.lastBackup?new Date(db.lastBackup).toLocaleString():'never'}</p><button class=btn data-a=cbk>Back up to cloud</button><button class="btn g" data-a=crs>Restore from cloud</button><button class="btn g" data-a=jx>Export JSON file</button>
+ ${teamCard()}<div class=card><div class=hd>Backup</div><p class=sb>Last backup: ${db.lastBackup?new Date(db.lastBackup).toLocaleString():'never'}</p><button class=btn data-a=jx>Export JSON file</button>
  <label style="margin-top:8px">Import JSON file<input type=file id=jin accept=".json,application/json"></label></div>`}
 
 /* ---------- render ---------- */
-function render(){const v=V();$('#vsel').innerHTML=db.v.map(x=>`<option value=${x.id} ${x.id===v.id?'selected':''}>${esc(x.name)} ${esc(x.plate)}</option>`).join('');
+function render(keep){const v=V();$('#vsel').innerHTML=db.v.map(x=>`<option value=${x.id} ${x.id===v.id?'selected':''}>${esc(x.name)} ${esc(x.plate)}</option>`).join('');
  const al=alerts(v),b=$('#bgc');b.textContent=al.length;b.classList.toggle('hide',!al.length);
  $('#nav').innerHTML=NAV.map(n=>`<button data-a=nav data-id=${n[0]} class="${scr===n[0]?'on':''}"><b>${n[1]}</b>${n[2]}</button>`).join('');
- $('#main').innerHTML=scr==='set'?setS():S[scr](v);if(scr==='logs')list();document.querySelectorAll('form[data-f]').forEach(syncPay);updHint();scrollTo(0,0)}
+ $('#main').innerHTML=scr==='set'?setS():S[scr](v);if(scr==='logs')list();document.querySelectorAll('form[data-f]').forEach(syncPay);updHint();if(!keep)scrollTo(0,0)}
 function panel(){const v=V(),al=alerts(v);$('#plist').innerHTML=al.length?al.map(a=>`<div class="al ${a.c}">${esc(a.t)} ${a.rid?`<button class=lk data-a=rdone data-id=${a.rid}>Mark done</button>`:a.sid?`<button class=lk data-a=svc data-id=${a.sid}>Mark done</button>`:''}</div>`).join(''):'<p class=sb>Nothing needs attention right now.</p>';$('#panel').classList.remove('hide')}
 
 /* ---------- Firebase ---------- */
 const FB=()=>fb||(fb=new Promise((ok,no)=>{const c=window.FIREBASE_CONFIG;if(!c||!c.apiKey||/YOUR/.test(c.apiKey))return no(Error('Add your Firebase settings to firebase-config.js first.'));
- let n=0;['app','auth','database'].forEach(x=>{const s=document.createElement('script');s.src=`https://www.gstatic.com/firebasejs/10.14.1/firebase-${x}-compat.js`;s.onload=()=>{if(++n===3){firebase.initializeApp(c);ok(firebase)}};s.onerror=()=>no(Error('Could not load Firebase. Check your internet connection.'));document.head.appendChild(s)})}));
+ let n=0;['app','auth','firestore'].forEach(x=>{const s=document.createElement('script');s.src=`https://www.gstatic.com/firebasejs/10.14.1/firebase-${x}-compat.js`;s.onload=()=>{if(++n===3){firebase.initializeApp(c);ok(firebase)}};s.onerror=()=>no(Error('Could not load Firebase. Check your internet connection.'));document.head.appendChild(s)})}));
 const F_=async()=>{try{return await FB()}catch(e){fb=null;throw e}};
 const fuser=async()=>{const f=await F_();return await new Promise(r=>{const u=f.auth().onAuthStateChanged(x=>{u();r(x)})})};
 const guard=fn=>async(...a)=>{try{await fn(...a)}catch(e){alert(e.message||e)}};
 const cloud={
- auth:guard(async(e,p,m)=>{const f=await F_(),a=f.auth();await(m==='up'?a.createUserWithEmailAndPassword(e,p):a.signInWithEmailAndPassword(e,p));db.user=e;save();toast('Signed in');render()}),
- out:guard(async()=>{const f=await F_();await f.auth().signOut();db.user=null;save();render()}),
- bk:guard(async()=>{const u=await fuser();if(!u)throw Error('Sign in first to use cloud backup.');const d=JSON.parse(JSON.stringify(db));delete d.pin;await firebase.database().ref('manskit-backup/'+u.uid).set({...d,_at:Date.now()});db.lastBackup=Date.now();save();toast('Backed up to cloud');render()}),
- rs:guard(async()=>{const u=await fuser();if(!u)throw Error('Sign in first to use cloud backup.');const s=await firebase.database().ref('manskit-backup/'+u.uid).get();if(!s.exists())throw Error('No cloud backup found for this account.');
-  if(!confirm('Restoring replaces the data on this device. Continue?'))return;const d=fix(s.val()),pin=db.pin,usr=db.user;db=d;db.pin=pin;db.user=usr;db.lastBackup=Date.now();if(!db.v.find(x=>x.id===db.act))db.act=db.v[0].id;save();toast('Restored');render()})};
+ auth:guard(async(e,p,m)=>{const f=await F_(),a=f.auth();await(m==='up'?a.createUserWithEmailAndPassword(e,p):a.signInWithEmailAndPassword(e,p));db.user=e;save();toast('Signed in');render();await teamBoot()}),
+ out:guard(async()=>{const f=await F_();await f.auth().signOut();teamStop();db.user=null;save();render()})};
+
+/* ---------- Team sync (Firestore) ---------- */
+const cj=o=>JSON.stringify(o,(k,v)=>v&&typeof v==='object'&&!Array.isArray(v)?Object.fromEntries(Object.keys(v).sort().map(x=>[x,v[x]])):v);
+const typing=()=>/INPUT|SELECT|TEXTAREA/.test(document.activeElement&&document.activeElement.tagName||'');
+const FS=()=>firebase.firestore(),hasLocal=()=>db.v.some(v=>v.logs.length||v.specs.length||v.docs.length||v.damages.length||v.rem.length);
+function flat(){const m={};db.v.forEach(v=>{const{photos,specs,docs,damages,logs,settles,rem,...x}=v;m['v_'+v.id]={_k:'veh',vid:v.id,...x};
+ [['l','log',logs],['s','spec',specs],['d','doc',docs],['g','dmg',damages],['t','settle',settles],['r','rem',rem]].forEach(([p,k,arr])=>arr.forEach(i=>{const{img,...y}=i;m[p+'_'+i.id]={_k:k,vid:v.id,...y}}))});
+ m.cfg={_k:'cfg',cats:db.cats};return JSON.parse(JSON.stringify(m))}
+function applyRemote(){const R=Object.values(TM.remote),old=Object.fromEntries(db.v.map(v=>[v.id,v])),img={};db.v.forEach(v=>v.docs.forEach(d=>{img[d.id]=d.img}));
+ const vs=R.filter(r=>r._k==='veh').map(r=>{const{_k,vid,...x}=r,o=old[x.id]||{};return{...newV(x.name,x.plate),...x,photos:o.photos||{}}});
+ const MAP={log:'logs',spec:'specs',doc:'docs',dmg:'damages',settle:'settles',rem:'rem'};
+ R.forEach(r=>{const a=MAP[r._k],v=a&&vs.find(x=>x.id===r.vid);if(!v)return;const{_k,vid,...x}=r;if(a==='docs'&&img[x.id])x.img=img[x.id];v[a].push(x)});
+ const c=R.find(r=>r._k==='cfg');if(c)db.cats=c.cats;if(vs.length){db.v=vs;if(!vs.find(v=>v.id===db.act))db.act=vs[0].id}fix(db);lsave()}
+let pt=null;
+function push(){clearTimeout(pt);if(!TM.on)return;pt=setTimeout(async()=>{if(!TM.on)return;const m=flat(),w=[];
+ for(const k in m)if(cj(m[k])!==TM.sent[k])w.push(['set',k,m[k]]);for(const k in TM.sent)if(!(k in m))w.push(['del',k]);if(!w.length)return;
+ try{const fs=FS(),c=fs.collection('hub');for(let i=0;i<w.length;i+=400){const b=fs.batch();w.slice(i,i+400).forEach(x=>x[0]==='set'?b.set(c.doc(x[1]),x[2]):b.delete(c.doc(x[1])));await b.commit()}
+  w.forEach(x=>x[0]==='set'?TM.sent[x[1]]=cj(x[2]):delete TM.sent[x[1]]);db.lastBackup=Date.now();lsave()}
+ catch(e){if(/permission/i.test((e.code||'')+(e.message||''))){alert('You have read-only access, so this change was not saved to the team.');applyRemote();render(true)}else toast('Could not sync. Will retry when online.')}},800)}
+async function teamEnsure(u){await F_();const r=FS().collection('users').doc(u.uid),s=await r.get();if(!s.exists)await r.set({email:u.email,name:(u.email||'').split('@')[0],status:'pending',role:'member'})}
+function hubStop(){if(TM.hub){TM.hub();TM.hub=null}TM.on=false;TM.remote={};TM.sent={}}
+function teamStop(){['un','uu','hub'].forEach(k=>{if(TM[k]){TM[k]();TM[k]=null}});TM.on=false;TM.remote={};TM.sent={};TM.users=[];TM.role=TM.status=null;TM.declined=false}
+function hubStart(){if(TM.hub)return;let first=true;TM.hub=FS().collection('hub').onSnapshot(snap=>{
+ snap.docChanges().forEach(c=>{if(c.type==='removed'){delete TM.remote[c.doc.id];delete TM.sent[c.doc.id]}else{const d=c.doc.data();TM.remote[c.doc.id]=d;TM.sent[c.doc.id]=cj(d)}});
+ if(first){first=false;
+  if(snap.empty){TM.on=true;db.team=TM.uid;lsave();push()}
+  else{if(db.team!==TM.uid&&hasLocal()&&!confirm("The team already has data. This device's own data will be replaced. Export a JSON backup first if you want to keep it. Replace now?")){hubStop();TM.declined=true;render(true);return}
+   TM.on=true;db.team=TM.uid;applyRemote();render(true)}
+  return}
+ if(!snap.metadata.hasPendingWrites){applyRemote();typing()?TM.pend=true:render(true)}},()=>toast('Sync error'))}
+function teamWatch(u){teamStop();TM.uid=u.uid;TM.un=FS().collection('users').doc(u.uid).onSnapshot(s=>{const d=s.data()||{};TM.role=d.role;TM.status=s.exists?d.status:'removed';
+ if(d.status==='approved'){hubStart();if(d.role==='admin'&&!TM.uu)TM.uu=FS().collection('users').onSnapshot(q=>{TM.users=q.docs.map(x=>({id:x.id,...x.data()})).sort((x,y)=>(x.status==='pending'?0:1)-(y.status==='pending'?0:1));if(!typing())render(true)},()=>{});
+  if(d.role!=='admin'&&TM.uu){TM.uu();TM.uu=null;TM.users=[]}}else hubStop();
+ if(!typing())render(true)},()=>toast('Team connection failed'))}
+async function teamBoot(){const u=await fuser();if(!u)return;await teamEnsure(u);teamWatch(u)}
+async function autoTeam(){const c=window.FIREBASE_CONFIG;if(!db.user||!c||/YOUR/.test(c.apiKey))return;try{await teamBoot()}catch(e){}}
+const tb=(u,f,v,l,c)=>`<button class="lk ${c||''}" data-a=tm data-id="${u}|${f}|${v}">${l}</button>`;
+function teamCard(){if(!db.user)return`<div class=card><div class=hd>Team</div><p class=sb>Sign in or register in the Account card above to join your team. After the admin approves you, your data syncs between everyone.</p></div>`;
+ const st=TM.status,msg=TM.declined?'Sync is off on this device. Sign out and sign in again to retry.':!st?'Connecting...':st==='approved'?'Approved as <b>'+esc(TM.role)+'</b>.':st==='blocked'?'Your access is blocked. Contact the admin.':st==='removed'?'Your access was removed. Sign out and register again to ask for access.':'Waiting for the admin to approve you.';
+ return`<div class=card><div class=hd>Team ${TM.on?'<span class=pill>Synced</span>':''}</div><p>${msg}</p>${TM.role==='viewer'&&st==='approved'?'<p class=sb>Read-only: you can view shared data but not change it.</p>':''}<p class=sb>Photos and document images stay on each device for now.</p>
+ ${TM.role==='admin'&&st==='approved'?`<div class=hd style="margin-top:10px">Members</div>${TM.users.map(m=>`<div class=row style="flex-wrap:wrap"><div>${esc(m.email)}<div class=sb>${esc(m.role)} · ${esc(m.status)}</div></div>${m.id===TM.uid?'<span class=sb>You</span>':`<span style="width:100%">${m.status==='approved'?tb(m.id,'status','blocked','Block','d'):tb(m.id,'status','approved','Approve')}${m.role!=='member'?tb(m.id,'role','member','Member'):''}${m.role!=='viewer'?tb(m.id,'role','viewer','Viewer'):''}${m.role!=='admin'?tb(m.id,'role','admin','Admin'):''}<button class="lk d" data-a=tmdel data-id="${m.id}">Remove</button></span>`}</div>`).join('')}`:''}</div>`}
+document.addEventListener('focusout',()=>setTimeout(()=>{if(TM.pend&&!typing()){TM.pend=false;render(true)}},400));
 
 /* ---------- actions ---------- */
 const dl=(name,txt,mime)=>{const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([txt],{type:mime}));a.download=name;a.click()};
@@ -176,7 +218,8 @@ const A={
  pdf:()=>{const v=V(),r=filt(v),w=open('','_blank');if(!w)return alert('Allow pop-ups to save a PDF.');w.document.write(`<title>${esc(v.name)} history</title><style>body{font:12px sans-serif}table{border-collapse:collapse;width:100%}td,th{border:1px solid #999;padding:4px;text-align:left}</style><h2>${esc(v.name)} ${esc(v.plate)}</h2><table><tr><th>Date<th>Type<th>Category<th>Amount<th>Odo<th>Note</tr>${r.map(l=>`<tr><td>${l.date}<td>${TYPES[l.t]}<td>${esc(l.cat)}<td>${l.amt}<td>${l.odo}<td>${esc(l.note)}</tr>`).join('')}</table><p><b>Total: ${money(r.reduce((a,l)=>a+ +l.amt,0))}</b></p>`);w.document.close();w.print()},
  cedit:(id,b)=>{const t=b.dataset.t,n=prompt('Rename category',db.cats[t][id]);if(n&&n.trim()){db.cats[t][id]=n.trim();save();render()}},
  cdel:(id,b)=>{const t=b.dataset.t;confirm('Delete "'+db.cats[t][id]+'"?')&&(db.cats[t].splice(id,1),save(),render())},
- pinoff:()=>{db.pin=null;localStorage.removeItem('mk_ok');save();render()},signout:()=>confirm('Sign out?')&&cloud.out(),pwreset:guard(async()=>{const e=prompt('Enter your account email');if(!e)return;const f=await F_();await f.auth().sendPasswordResetEmail(e);alert('If this email has an account, a reset link was sent.')}),cbk:()=>cloud.bk(),crs:()=>cloud.rs(),
+ pinoff:()=>{db.pin=null;localStorage.removeItem('mk_ok');save();render()},signout:()=>confirm('Sign out?')&&cloud.out(),pwreset:guard(async()=>{const e=prompt('Enter your account email');if(!e)return;const f=await F_();await f.auth().sendPasswordResetEmail(e);alert('If this email has an account, a reset link was sent.')}),tm:guard(async id=>{const[u,f,v]=id.split('|');await FS().collection('users').doc(u).update({[f]:v});toast('Updated')}),
+ tmdel:guard(async id=>{if(confirm('Remove this member? They can ask for access again.'))await FS().collection('users').doc(id).delete()}),
  jx:()=>{const d=JSON.parse(JSON.stringify(db));delete d.pin;dl('vehiclehub-backup-'+today()+'.json',JSON.stringify(d),'application/json');db.lastBackup=Date.now();save();render()}
 };
 document.addEventListener('click',e=>{const b=e.target.closest('[data-a]');if(b)A[b.dataset.a]?.(b.dataset.id,b)});
@@ -207,7 +250,7 @@ document.addEventListener('submit',async e=>{e.preventDefault();const f=new Form
 document.addEventListener('change',e=>{const t=e.target;if(t.form&&['scope','payer','splitm'].includes(t.name))syncPay(t.form);if(t.name==='cat'||t.name==='t')updHint()});
 document.addEventListener('input',e=>{const t=e.target;if(t.name&&t.name.startsWith('sh_')&&t.form.querySelectorAll('[name^=sh_]').length===2){const o=t.form.querySelector('[name='+(t.name==='sh_0'?'sh_1':'sh_0')+']');o.value=Math.round((100-(+t.value||0))*100)/100}});
 /* ---------- lock ---------- */
-function start(){render()}
+function start(){render();autoTeam()}
 function lockCheck(){const p=db.pin;if(p&&!(p.ask===false&&localStorage.getItem('mk_ok')===p.h)){$('#lock').classList.remove('hide');$('#pin').focus()}else start()}
 $('#unlock').onclick=async()=>{const h=await hash($('#pin').value);if(h===db.pin.h){if(db.pin.ask===false)localStorage.setItem('mk_ok',h);$('#lock').classList.add('hide');$('#pin').value='';start()}else $('#pinerr').textContent='Wrong PIN. Try again.'};
 $('#pin').onkeydown=e=>e.key==='Enter'&&$('#unlock').click();
