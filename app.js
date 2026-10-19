@@ -12,7 +12,7 @@ const NAV=[['home','⌂','Home'],['add','＋','Log'],['prof','🚘','Profile'],[
 const sel=(a,o)=>a.map(i=>`<option ${i===o?'selected':''}>${esc(i)}</option>`).join('');
 let scr='home',type='fuel',editId=null,fb=null,emiEdit=null,F={q:'',t:'all',s:'new'};
 
-let MD=null,TM={users:[],sent:{},remote:{},on:false};
+let MD=null,TM={reqs:[],users:[],sent:{},remote:{},on:false};
 const newV=(name,plate)=>({id:uid(),name,plate,model:'',odo0:0,partners:['You','Partner'],specs:[],docs:[],photos:{},damages:[],logs:[],fin:{pays:[]},settles:[],rem:[]});
 function fix(d){d.v.forEach(v=>{['specs','docs','damages','logs','settles','rem'].forEach(k=>v[k]=Object.values(v[k]||{}));v.photos=v.photos||{};v.fin=v.fin||{};v.fin.pays=Object.values(v.fin.pays||{});v.partners=Object.values(v.partners||['You'])});d.cats=d.cats||DEF;return d}
 function load(){try{const d=JSON.parse(localStorage.getItem(LS));if(d&&d.v){fix(d);if(!d.m7){d.m7=1;d.cats.maintenance=d.cats.maintenance||[];['Water service','Air check'].forEach(c=>d.cats.maintenance.includes(c)||d.cats.maintenance.push(c))}return d}}catch(e){}const v=newV('My Vehicle','');return{v:[v],act:v.id,cats:DEF,m7:1,pin:null,lastBackup:null,user:null}}
@@ -49,10 +49,12 @@ function alerts(v){const a=[];
  due(v).filter(s=>s.st!=='ok').forEach(s=>a.push({c:s.st,t:`${s.k} service ${s.st==='bad'?'is due now':'is due soon'}`,sid:s.id}));
  if(v.logs.length&&(!db.lastBackup||Date.now()-db.lastBackup>7*864e5))a.push({c:'warn',t:'Your last backup is over 7 days old. Export JSON or back up to the cloud.'});
  if(TM.role==='admin'&&TM.status==='approved'){const n=TM.users.filter(u=>u.status==='pending').length;if(n)a.push({c:'warn',t:`${n} join request${n>1?'s are':' is'} waiting for your approval (Settings, Team)`})}
+ if(TM.role==='admin'&&TM.status==='approved'){const q=TM.reqs.filter(r=>r.status==='pending').length;if(q)a.push({c:'warn',t:`${q} change request${q>1?'s are':' is'} waiting for your approval (Settings, Administrator panel)`})}
  return a}
 
 /* ---------- images (images only, compressed) ---------- */
 const okImg=f=>f&&/^image\/(jpe?g|png|webp)$/i.test(f.type)&&/\.(jpe?g|png|webp)$/i.test(f.name);
+const thumbPic=f=>new Promise((ok,no)=>{if(!okImg(f))return no(Error('Only JPG, PNG or WEBP images are allowed.'));const r=new FileReader();r.onload=()=>{const i=new Image();i.onload=()=>{const s=Math.min(i.width,i.height),c=document.createElement('canvas');c.width=c.height=160;c.getContext('2d').drawImage(i,(i.width-s)/2,(i.height-s)/2,s,s,0,0,160,160);ok(c.toDataURL('image/jpeg',.75))};i.onerror=()=>no(Error('This image could not be read.'));i.src=r.result};r.readAsDataURL(f)});
 const pic=f=>new Promise((ok,no)=>{if(!okImg(f))return no(Error('Only JPG, PNG or WEBP images are allowed. Other files (APK, MP3, etc.) are blocked.'));
  const r=new FileReader();r.onload=()=>{const i=new Image();i.onload=()=>{const k=Math.min(1,900/Math.max(i.width,i.height)),c=document.createElement('canvas');c.width=i.width*k;c.height=i.height*k;c.getContext('2d').drawImage(i,0,0,c.width,c.height);ok(c.toDataURL('image/jpeg',.72))};i.onerror=()=>no(Error('This image could not be read.'));i.src=r.result};r.readAsDataURL(f)});
 
@@ -88,7 +90,7 @@ const PP=v=>{const P=v.partners;if(P.length<2)return'';const E=ents(v);return`<d
 const S={
 home(v){const L=v.logs,sum=t=>L.filter(l=>t.includes(l.t)).reduce((a,l)=>a+ +l.amt,0),tot=sum(Object.keys(TYPES)),m=mileage(v),al=alerts(v),o=odo(v),mo=L.filter(l=>l.date.slice(0,7)===today().slice(0,7)).reduce((a,l)=>a+ +l.amt,0);
  const lo=L.length?Math.min(...L.map(l=>+l.odo)):0,kms=o-Math.min(lo||o,+v.odo0||lo||o),cpk=kms>0?tot/kms:0,sv=due(v),lf=m.last,R=(k,x)=>`<div class=row><span class=sb>${k}</span><b>${x}</b></div>`;
- return`<div class="card hero"><span class=plate>${esc(v.plate||'NO PLATE')}</span><div class=vn>${esc(v.name)}</div><div class=sb>${esc(v.model)}</div><div class=big>${o.toLocaleString('en-IN')} <small class=sb>km</small></div></div>
+ return`<div class="card hero"><div class=hr>${v.thumb&&/^data:image\//.test(v.thumb)?`<img class=hth src="${v.thumb}" alt="">`:'<div class="hth hph">🚘</div>'}<div><div class=sb>Odometer</div><div class=big>${o.toLocaleString('en-IN')} <small class=sb>km</small></div>${v.model?`<div class=sb>${esc(v.model)}</div>`:''}</div></div></div>
  ${al.length?`<div class="al ${al[0].c}"><b>${al.length} alert${al.length>1?'s':''}</b><div>${esc(al[0].t)}</div></div>`:'<div class="al ok">All papers and services are up to date.</div>'}
  <div class=grid><div class=st><small>Running cost</small><b>${money(tot)}</b></div><div class=st><small>This month</small><b>${money(mo)}</b></div><div class=st><small>Fuel</small><b>${money(sum(['fuel']))}</b></div><div class=st><small>Maintenance</small><b>${money(sum(['maintenance']))}</b></div><div class=st><small>Cost per km</small><b>${cpk?'₹'+cpk.toFixed(2):'–'}</b></div><div class=st><small>Last fuel price</small><b>${lf?'₹'+(lf.amt/lf.lit).toFixed(2)+'/L':'–'}</b></div></div>
  <div class=card><div class=hd>Mileage</div>${m.avg?`<div class=mrow><div><div class=big>${m.avg.toFixed(1)}<small class=sb> km/L</small></div><div class=sb>Overall average</div></div>${m.r5?`<div class=r5><b>${m.r5.toFixed(1)}</b><span class=sb>last 5 fills</span></div>`:''}</div><div class=sb>${esc(m.acc)}</div><div class=sb style="margin:12px 0 4px">Trend, 5-fill average</div>${lineChart(m.pts)}`:'<p class=sb>Add at least two fuel entries with km and liters to see your mileage.</p>'}</div>
@@ -108,6 +110,7 @@ add(v){const e=editId&&v.logs.find(l=>l.id===editId)||{},t=e.t||type;
 prof(v){const P=v.partners.join(', ');
  return`<div class=card><div class=hd>Vehicle details</div><form data-f=veh><div class=r2><label>Name<input name=name value="${esc(v.name)}" required></label><label>Plate<input name=plate value="${esc(v.plate)}"></label></div>
  <div class=r2><label>Model / variant<input name=model value="${esc(v.model)}"></label><label>Starting odometer<input type=number name=odo0 value="${v.odo0||0}"></label></div>
+ <label>Vehicle photo (shown as thumbnail)<input type=file name=thumb accept="image/jpeg,image/png,image/webp"></label>${v.thumb?'<button type=button class=lk data-a=thumbdel>Remove current photo</button>':''}
  <label>Fuel tank size (liters)<input type=number step=.1 name=tank value="${v.tank||''}" placeholder="Shows mileage accuracy"></label>
  <label>Owners / partners (comma separated, max 4)<input name=partners value="${esc(P)}"></label><button class=btn>Save details</button></form></div>
  <div class=card><div class=hd>Reminders</div><form data-f=rem class=r2><label>Title<input name=title placeholder="e.g. Water service" required></label><label>Date<input type=date name=date required></label><button class="btn" style="grid-column:1/3">Add reminder</button></form>
@@ -147,7 +150,9 @@ function setS(){const u=db.user,p=db.pin;
  <label style="margin-top:8px">Import JSON file<input type=file id=jin accept=".json,application/json"></label></div>`}
 
 /* ---------- render ---------- */
-function render(keep){const v=V();$('#vsel').innerHTML=db.v.map(x=>`<option value=${x.id} ${x.id===v.id?'selected':''}>${esc(x.name)} ${esc(x.plate)}</option>`).join('');
+function render(keep){const v=V();const tn=x=>x.thumb&&/^data:image\//.test(x.thumb)?`<img src="${x.thumb}" alt="">`:'<span class=tph>🚘</span>';
+ $('#vsel').innerHTML=db.v.map(x=>`<button class="vc ${x.id===v.id?'on':''}" data-a=vsw data-id=${x.id}>${tn(x)}<span><b>${esc(x.name)}</b><small>${esc(x.plate||'No plate')}</small></span></button>`).join('');
+ {const c=$('#vsel'),o=c.querySelector&&c.querySelector('.on');if(o)c.scrollLeft=o.offsetLeft-c.clientWidth/2+o.offsetWidth/2}
  const al=alerts(v),b=$('#bgc');b.textContent=al.length;b.classList.toggle('hide',!al.length);
  $('#nav').innerHTML=NAV.map(n=>`<button data-a=nav data-id=${n[0]} class="${scr===n[0]?'on':''}"><b>${n[1]}</b>${n[2]}</button>`).join('');
  $('#main').innerHTML=scr==='set'?setS():S[scr](v);if(scr==='logs')list();document.querySelectorAll('form[data-f]').forEach(syncPay);updHint();if(MD&&(!keep||!typing()))showModal();if(!keep)scrollTo(0,0)}
@@ -176,31 +181,43 @@ function applyRemote(){const R=Object.values(TM.remote),old=Object.fromEntries(d
  R.forEach(r=>{const a=MAP[r._k],v=a&&vs.find(x=>x.id===r.vid);if(!v)return;const{_k,vid,...x}=r;if(a==='docs'&&img[x.id])x.img=img[x.id];v[a].push(x)});
  const c=R.find(r=>r._k==='cfg');if(c)db.cats=c.cats;if(vs.length){db.v=vs;if(!vs.find(v=>v.id===db.act))db.act=vs[0].id}fix(db);lsave()}
 let pt=null;
-function push(){clearTimeout(pt);if(!TM.on)return;pt=setTimeout(async()=>{if(!TM.on)return;const m=flat(),w=[];
- for(const k in m)if(cj(m[k])!==TM.sent[k])w.push(['set',k,m[k]]);for(const k in TM.sent)if(!(k in m))w.push(['del',k]);if(!w.length)return;
- try{const fs=FS(),c=fs.collection('hub');for(let i=0;i<w.length;i+=400){const b=fs.batch();w.slice(i,i+400).forEach(x=>x[0]==='set'?b.set(c.doc(x[1]),x[2]):b.delete(c.doc(x[1])));await b.commit()}
-  w.forEach(x=>x[0]==='set'?TM.sent[x[1]]=cj(x[2]):delete TM.sent[x[1]]);db.lastBackup=Date.now();lsave()}
- catch(e){if(/permission/i.test((e.code||'')+(e.message||''))){alert('You have read-only access, so this change was not saved to the team.');applyRemote();render(true)}else toast('Could not sync. Will retry when online.')}},800)}
+const KN={veh:'vehicle',log:'entry',spec:'spec',doc:'document',dmg:'damage record',settle:'settlement',rem:'reminder',cfg:'categories'};
+function descr(x){const d=x[0]==='set'?x[2]:TM.remote[x[1]]||{},nm=d.name||(d.cat?d.cat+' '+d.amt:'')||d.k||d.type||d.title||d.note||'';return(x[0]==='del'?'Delete ':x[1] in TM.sent?'Edit ':'Add ')+(KN[d._k]||'item')+(nm?' ('+nm+')':'')}
+async function sendReq(req){const ops=req.map(x=>x[0]==='set'?{op:'set',key:x[1],json:JSON.stringify(x[2])}:{op:'del',key:x[1]}),js=JSON.stringify(ops);if(js.length>900000)throw Error('This change is too large to send for approval. Ask the admin to make it.');
+ await FS().collection('requests').add({by:TM.uid,byEmail:db.user,label:req.slice(0,3).map(descr).join('; ')+(req.length>3?' +'+(req.length-3)+' more':''),ops:js,status:'pending',at:Date.now()})}
+function push(){clearTimeout(pt);if(!TM.on)return;pt=setTimeout(async()=>{if(!TM.on)return;
+ if(TM.role==='viewer'){alert('You have read-only access, so this change was not saved.');applyRemote();render(true);return}
+ const m=flat(),w=[];for(const k in m)if(cj(m[k])!==TM.sent[k])w.push(['set',k,m[k]]);for(const k in TM.sent)if(!(k in m))w.push(['del',k]);if(!w.length)return;
+ const mem=TM.role!=='admin',okd=x=>x[0]==='set'&&!(x[1] in TM.sent)&&['log','rem','dmg'].includes(x[2]._k)&&('v_'+x[2].vid) in TM.sent,direct=mem?w.filter(okd):w,req=mem?w.filter(x=>!okd(x)):[];
+ try{const fs=FS(),c=fs.collection('hub');
+  for(let i=0;i<direct.length;i+=400){const b=fs.batch();direct.slice(i,i+400).forEach(x=>x[0]==='set'?b.set(c.doc(x[1]),x[2]):b.delete(c.doc(x[1])));await b.commit()}
+  direct.forEach(x=>{if(x[0]==='set'){TM.sent[x[1]]=cj(x[2]);TM.remote[x[1]]=JSON.parse(JSON.stringify(x[2]))}else{delete TM.sent[x[1]];delete TM.remote[x[1]]}});
+  if(req.length){await sendReq(req);applyRemote();render(true);toast('Sent to the admin for approval')}
+  db.lastBackup=Date.now();lsave()}
+ catch(e){if(/permission/i.test((e.code||'')+(e.message||''))){alert('You do not have permission for this change.');applyRemote();render(true)}else toast(e.message&&!e.code?e.message:'Could not sync. Will retry when online.')}},800)}
 async function teamEnsure(u){await F_();const r=FS().collection('users').doc(u.uid),s=await r.get();if(!s.exists)await r.set({email:u.email,name:(u.email||'').split('@')[0],status:'pending',role:'member'})}
 function hubStop(){if(TM.hub){TM.hub();TM.hub=null}TM.on=false;TM.remote={};TM.sent={}}
-function teamStop(){['un','uu','hub'].forEach(k=>{if(TM[k]){TM[k]();TM[k]=null}});TM.on=false;TM.remote={};TM.sent={};TM.users=[];TM.role=TM.status=null;TM.declined=false}
+function teamStop(){['un','uu','rq','hub'].forEach(k=>{if(TM[k]){TM[k]();TM[k]=null}});TM.on=false;TM.remote={};TM.sent={};TM.users=[];TM.role=TM.status=null;TM.declined=false}
 function hubStart(){if(TM.hub)return;let first=true;TM.hub=FS().collection('hub').onSnapshot(snap=>{
  snap.docChanges().forEach(c=>{if(c.type==='removed'){delete TM.remote[c.doc.id];delete TM.sent[c.doc.id]}else{const d=c.doc.data();TM.remote[c.doc.id]=d;TM.sent[c.doc.id]=cj(d)}});
  if(first){first=false;
-  if(snap.empty){TM.on=true;db.team=TM.uid;lsave();push()}
+  if(snap.empty){TM.on=true;db.team=TM.uid;lsave();if(TM.role==='admin')push()}
   else{if(db.team!==TM.uid&&hasLocal()&&!confirm("The team already has data. This device's own data will be replaced. Export a JSON backup first if you want to keep it. Replace now?")){hubStop();TM.declined=true;render(true);return}
    TM.on=true;db.team=TM.uid;applyRemote();render(true)}
   return}
  if(!snap.metadata.hasPendingWrites){applyRemote();typing()?TM.pend=true:render(true)}},()=>toast('Sync error'))}
 function teamWatch(u){teamStop();TM.uid=u.uid;TM.un=FS().collection('users').doc(u.uid).onSnapshot(s=>{const d=s.data()||{};TM.role=d.role;TM.status=s.exists?d.status:'removed';
- if(d.status==='approved'){hubStart();if(d.role==='admin'&&!TM.uu)TM.uu=FS().collection('users').onSnapshot(q=>{TM.users=q.docs.map(x=>({id:x.id,...x.data()})).sort((x,y)=>(x.status==='pending'?0:1)-(y.status==='pending'?0:1));if(!typing())render(true)},()=>{});
-  if(d.role!=='admin'&&TM.uu){TM.uu();TM.uu=null;TM.users=[]}}else hubStop();
+ if(d.status==='approved'){hubStart();const rr=d.role==='admin'||d.role==='member'?d.role:null;if(TM.rq&&TM.rqr!==rr){TM.rq();TM.rq=null;TM.reqs=[]}
+  if(rr&&!TM.rq){TM.rqr=rr;const rc=FS().collection('requests');TM.rq=(rr==='admin'?rc:rc.where('by','==',TM.uid)).onSnapshot(q=>{TM.reqs=q.docs.map(x=>({id:x.id,...x.data()})).sort((x,y)=>(y.at||0)-(x.at||0));if(!typing())render(true)},()=>{})}
+  if(d.role==='admin'&&!TM.uu)TM.uu=FS().collection('users').onSnapshot(q=>{TM.users=q.docs.map(x=>({id:x.id,...x.data()})).sort((x,y)=>(x.status==='pending'?0:1)-(y.status==='pending'?0:1));if(!typing())render(true)},()=>{});
+  if(d.role!=='admin'&&TM.uu){TM.uu();TM.uu=null;TM.users=[]}}else{hubStop();if(TM.rq){TM.rq();TM.rq=null;TM.reqs=[]}}
  if(!typing())render(true)},()=>toast('Team connection failed'))}
 async function teamBoot(){const u=await fuser();if(!u)return;await teamEnsure(u);teamWatch(u)}
 async function autoTeam(){const c=window.FIREBASE_CONFIG;if(!db.user||!c||/YOUR/.test(c.apiKey))return;try{await teamBoot()}catch(e){}}
 const catsHtml=()=>Object.keys(TYPES).map(t=>`<div class=sb style="margin-top:8px"><b>${TYPES[t]}</b></div>${(db.cats[t]||[]).map((c,i)=>`<div class=row><span>${esc(c)}</span><span><button class=lk data-a=cedit data-t=${t} data-id=${i}>Edit</button><button class="lk d" data-a=cdel data-t=${t} data-id=${i}>Delete</button></span></div>`).join('')}<form data-f=cat class=r2><input type=hidden name=t value=${t}><input name=n placeholder="New category" required><button class="btn g" style="margin:0">Add</button></form>`).join('');
 function adminHtml(){if(Date.now()-(TM.adminOk||0)>3e5)return`<p class=sb>For privacy, confirm your password to open this section. It locks again after 5 minutes or when you leave the app.</p><form data-f=adminpw><label>Password<input type=password name=p required autocomplete=current-password></label><button class=btn>Unlock</button></form>`;
- return`<p class=sb>${TM.users.length} people · ${TM.users.filter(m=>m.status==='pending').length} waiting</p>${TM.users.map(m=>`<div class=row style="flex-wrap:wrap"><div>${esc(m.email)}<div class=sb>${esc(m.role)} · ${esc(m.status)}</div></div>${m.id===TM.uid?'<span class=sb>You</span>':`<span style="width:100%">${m.status==='approved'?tb(m.id,'status','blocked','Block','d'):tb(m.id,'status','approved','Approve')}${m.role!=='member'?tb(m.id,'role','member','Member'):''}${m.role!=='viewer'?tb(m.id,'role','viewer','Viewer'):''}${m.role!=='admin'?tb(m.id,'role','admin','Admin'):''}<button class="lk d" data-a=tmdel data-id="${m.id}">Remove</button></span>`}</div>`).join('')}<button class="btn g" data-a=alock>Lock now</button>`}
+ const rq=TM.reqs.filter(r=>r.status==='pending'),dn=TM.reqs.filter(r=>r.status!=='pending').slice(0,5);
+ return`<div class=hd style="font-size:15px">Approval requests (${rq.length})</div>${rq.length?rq.map(r=>`<div class=row style="flex-wrap:wrap"><div>${esc(r.label)}<div class=sb>${esc(r.byEmail)} · ${new Date(r.at).toLocaleString()}</div></div><span style="width:100%"><button class=lk data-a=rqa data-id="${r.id}">Approve</button><button class="lk d" data-a=rqr data-id="${r.id}">Reject</button></span></div>`).join(''):'<p class=sb>No requests waiting.</p>'}${dn.length?`<div class=sb style="margin-top:6px">Recent decisions</div>${dn.map(r=>`<div class=row><span class=sb>${esc(r.label)}</span><span class="pill ${r.status==='approved'?'':'bad'}">${esc(r.status)}</span></div>`).join('')}`:''}<div class=hd style="font-size:15px;margin-top:14px">People · ${TM.users.filter(m=>m.status==='pending').length} waiting</div>${TM.users.map(m=>`<div class=row style="flex-wrap:wrap"><div>${esc(m.email)}<div class=sb>${esc(m.role)} · ${esc(m.status)}</div></div>${m.id===TM.uid?'<span class=sb>You</span>':`<span style="width:100%">${m.status==='approved'?tb(m.id,'status','blocked','Block','d'):tb(m.id,'status','approved','Approve')}${m.role!=='member'?tb(m.id,'role','member','Member'):''}${m.role!=='viewer'?tb(m.id,'role','viewer','Viewer'):''}${m.role!=='admin'?tb(m.id,'role','admin','Admin'):''}<button class="lk d" data-a=tmdel data-id="${m.id}">Remove</button></span>`}</div>`).join('')}<button class="btn g" data-a=alock>Lock now</button>`}
 function showModal(){if(!MD)return;$('#mt').textContent=MD.t;$('#mb').innerHTML=MD.fn();$('#modal').classList.remove('hide')}
 const openModal=(t,fn)=>{MD={t,fn};showModal()},closeModal=()=>{MD=null;$('#modal').classList.add('hide')};
 document.addEventListener('click',e=>{if(e.target.id==='modal')closeModal()});
@@ -208,8 +225,8 @@ document.addEventListener('visibilitychange',()=>{if(document.hidden&&TM.adminOk
 const tb=(u,f,v,l,c)=>`<button class="lk ${c||''}" data-a=tm data-id="${u}|${f}|${v}">${l}</button>`;
 function teamCard(){if(!db.user)return`<div class=card><div class=hd>Team</div><p class=sb>Sign in or register in the Account card above to join your team. After the admin approves you, your data syncs between everyone.</p></div>`;
  const st=TM.status,msg=TM.declined?'Sync is off on this device. Sign out and sign in again to retry.':!st?'Connecting...':st==='approved'?'Approved as <b>'+esc(TM.role)+'</b>.':st==='blocked'?'Your access is blocked. Contact the admin.':st==='removed'?'Your access was removed. Sign out and register again to ask for access.':'Waiting for the admin to approve you.';
- return`<div class=card><div class=hd>Team ${TM.on?'<span class=pill>Synced</span>':''}</div><p>${msg}</p>${TM.role==='viewer'&&st==='approved'?'<p class=sb>Read-only: you can view shared data but not change it.</p>':''}<p class=sb>Photos and document images stay on each device for now.</p>
- ${TM.role==='admin'&&st==='approved'?`<p class=sb>${TM.users.length} people · ${TM.users.filter(m=>m.status==='pending').length} waiting</p><button class=btn data-a=admin>Administrator panel</button>`:''}</div>`}
+ return`<div class=card><div class=hd>Team ${TM.on?'<span class=pill>Synced</span>':''}</div><p>${msg}</p>${TM.role==='viewer'&&st==='approved'?'<p class=sb>Read-only: you can view shared data but not change it.</p>':''}<p class=sb>Photos and document images stay on each device for now.</p>${TM.role==='member'&&st==='approved'?`<p class=sb>You can add entries, reminders and damage records directly. Edits, deletes, categories and vehicle details are sent to the admin for approval.</p>${TM.reqs.slice(0,5).map(r=>`<div class=row><span class=sb>${esc(r.label)}</span><span class="pill ${r.status==='approved'?'':r.status==='rejected'?'bad':'warn'}">${esc(r.status)}</span></div>`).join('')}`:''}
+ ${TM.role==='admin'&&st==='approved'?`<p class=sb>${TM.users.length} people · ${TM.users.filter(m=>m.status==='pending').length} waiting · ${TM.reqs.filter(r=>r.status==='pending').length} changes to approve</p><button class=btn data-a=admin>Administrator panel</button>`:''}</div>`}
 document.addEventListener('focusout',()=>setTimeout(()=>{if(TM.pend&&!typing()){TM.pend=false;render(true)}},400));
 
 /* ---------- actions ---------- */
@@ -235,15 +252,18 @@ const A={
  pdf:()=>{const v=V(),r=filt(v),w=open('','_blank');if(!w)return alert('Allow pop-ups to save a PDF.');w.document.write(`<title>${esc(v.name)} history</title><style>body{font:12px sans-serif}table{border-collapse:collapse;width:100%}td,th{border:1px solid #999;padding:4px;text-align:left}</style><h2>${esc(v.name)} ${esc(v.plate)}</h2><table><tr><th>Date<th>Type<th>Category<th>Amount<th>Odo<th>Note</tr>${r.map(l=>`<tr><td>${l.date}<td>${TYPES[l.t]}<td>${esc(l.cat)}<td>${l.amt}<td>${l.odo}<td>${esc(l.note)}</tr>`).join('')}</table><p><b>Total: ${money(r.reduce((a,l)=>a+ +l.amt,0))}</b></p>`);w.document.close();w.print()},
  cedit:(id,b)=>{const t=b.dataset.t,n=prompt('Rename category',db.cats[t][id]);if(n&&n.trim()){db.cats[t][id]=n.trim();save();render()}},
  cdel:(id,b)=>{const t=b.dataset.t;confirm('Delete "'+db.cats[t][id]+'"?')&&(db.cats[t].splice(id,1),save(),render())},
- pinoff:()=>{db.pin=null;localStorage.removeItem('mk_ok');save();render()},signout:()=>confirm('Sign out?')&&cloud.out(),pwreset:guard(async()=>{const e=prompt('Enter your account email');if(!e)return;const f=await F_();await f.auth().sendPasswordResetEmail(e);alert('If this email has an account, a reset link was sent.')}),cats:()=>openModal('Categories',catsHtml),mclose:closeModal,alock:()=>{TM.adminOk=0;showModal()},
+ pinoff:()=>{db.pin=null;localStorage.removeItem('mk_ok');save();render()},signout:()=>confirm('Sign out?')&&cloud.out(),pwreset:guard(async()=>{const e=prompt('Enter your account email');if(!e)return;const f=await F_();await f.auth().sendPasswordResetEmail(e);alert('If this email has an account, a reset link was sent.')}),vsw:id=>{db.act=id;lsave();render()},thumbdel:()=>{delete V().thumb;save();render()},
+ cats:()=>openModal('Categories',catsHtml),mclose:closeModal,alock:()=>{TM.adminOk=0;showModal()},
  admin:()=>{if(TM.role==='admin'&&TM.status==='approved')openModal('Administrator',adminHtml)},
+ rqa:guard(async id=>{const r=TM.reqs.find(x=>x.id===id);if(!r||!confirm('Approve this change?\n'+r.label))return;const ops=JSON.parse(r.ops),fs=FS(),c=fs.collection('hub');
+  for(let i=0;i<ops.length;i+=400){const b=fs.batch();ops.slice(i,i+400).forEach(o=>o.op==='set'?b.set(c.doc(o.key),JSON.parse(o.json)):b.delete(c.doc(o.key)));if(i+400>=ops.length)b.update(fs.collection('requests').doc(id),{status:'approved',decidedAt:Date.now(),decidedBy:db.user});await b.commit()}applyRemote();render(true);toast('Approved')}),
+ rqr:guard(async id=>{if(!confirm('Reject this change?'))return;await FS().collection('requests').doc(id).update({status:'rejected',decidedAt:Date.now(),decidedBy:db.user});toast('Rejected')}),
  tm:guard(async id=>{const[u,f,v]=id.split('|'),m=TM.users.find(x=>x.id===u);if(!confirm('Set '+f+' to "'+v+'" for '+(m?m.email:'this person')+'?'))return;await FS().collection('users').doc(u).update({[f]:v});toast('Updated')}),
  tmdel:guard(async id=>{if(confirm('Remove this member? They can ask for access again.'))await FS().collection('users').doc(id).delete()}),
  jx:()=>{const d=JSON.parse(JSON.stringify(db));delete d.pin;dl('vehiclehub-backup-'+today()+'.json',JSON.stringify(d),'application/json');db.lastBackup=Date.now();save();render()}
 };
 document.addEventListener('click',e=>{const b=e.target.closest('[data-a]');if(b)A[b.dataset.a]?.(b.dataset.id,b)});
 $('#bell').onclick=panel;
-$('#vsel').onchange=e=>{db.act=e.target.value;save();render()};
 $('#vadd').onclick=()=>{const n=prompt('Vehicle name');if(!n)return;const v=newV(n,(prompt('Plate number (optional)')||'').toUpperCase());db.v.push(v);db.act=v.id;save();scr='prof';render()};
 $('#vdel').onclick=()=>{if(db.v.length<2)return alert('Keep at least one vehicle.');const v=V();if(confirm(`Delete ${v.name} and all its data?`)){db.v=db.v.filter(x=>x!==v);db.act=db.v[0].id;save();render()}};
 document.addEventListener('input',e=>{if(e.target.id==='q'){F.q=e.target.value;list()}});
@@ -253,7 +273,7 @@ const hash=async p=>{const s='mk|'+p;if(!crypto.subtle)return btoa(s);return[...
 const FORM={
  log(o,v){const q=parsePay(o,v.partners,+o.amt),e={t:o.t,date:o.date,odo:+o.odo,cat:o.cat,amt:+o.amt,lit:+o.lit||0,fl:o.t==='fuel'&&!!o.fl,scope:q.scope,pd:q.pd,sh:q.sh,payer:Object.keys(q.pd)[0],note:o.note};
   if(editId){Object.assign(v.logs.find(l=>l.id===editId),e);editId=null}else v.logs.push({id:uid(),...e});save();toast('Saved');scr='logs';render()},
- veh(o,v){Object.assign(v,{name:o.name,plate:o.plate.toUpperCase(),model:o.model,odo0:+o.odo0||0,tank:+o.tank||0});const p=o.partners.split(',').map(s=>s.trim()).filter(Boolean).slice(0,4);v.partners=p.length?p:['You'];save();toast('Saved');render()},
+ async veh(o,v,f){if(f.get('thumb')&&f.get('thumb').size)v.thumb=await thumbPic(f.get('thumb'));Object.assign(v,{name:o.name,plate:o.plate.toUpperCase(),model:o.model,odo0:+o.odo0||0,tank:+o.tank||0});const p=o.partners.split(',').map(s=>s.trim()).filter(Boolean).slice(0,4);v.partners=p.length?p:['You'];save();toast('Saved');render()},
  rem(o,v){v.rem.push({id:uid(),title:o.title,date:o.date,done:false});save();render()},
  spec(o,v){v.specs.push({id:uid(),g:o.g,k:o.k,v:o.v,km:+o.km||0,days:+o.days||0});save();render()},
  dmg(o,v){v.damages.push({id:uid(),zone:o.zone,note:o.note,date:o.date,status:'Pending'});save();render()},
