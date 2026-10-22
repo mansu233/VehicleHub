@@ -12,12 +12,12 @@ const NAV=[['home','⌂','Home'],['add','＋','Log'],['prof','🚘','Profile'],[
 const sel=(a,o)=>a.map(i=>`<option ${i===o?'selected':''}>${esc(i)}</option>`).join('');
 let scr='home',type='fuel',editId=null,fb=null,emiEdit=null,F={q:'',t:'all',s:'new'};
 
-let MD=null,TM={sel:{},open:{},perms:{},reqs:[],users:[],sent:{},remote:{},on:false};
+let MD=null,TM={seen:{},hubs:{},sel:{},open:{},perms:{},reqs:[],users:[],sent:{},remote:{},on:false};
 const newV=(name,plate)=>({id:uid(),name,plate,model:'',odo0:0,partners:['You','Partner'],specs:[],docs:[],photos:{},damages:[],logs:[],fin:{pays:[]},settles:[],rem:[]});
 function fix(d){d.v.forEach(v=>{['specs','docs','damages','logs','settles','rem'].forEach(k=>v[k]=Object.values(v[k]||{}));v.photos=v.photos||{};v.fin=v.fin||{};v.fin.pays=Object.values(v.fin.pays||{});v.partners=Object.values(v.partners||['You'])});d.cats=d.cats||DEF;return d}
 function load(){try{const d=JSON.parse(localStorage.getItem(LS));if(d&&d.v){fix(d);if(!d.m7){d.m7=1;d.cats.maintenance=d.cats.maintenance||[];['Water service','Air check'].forEach(c=>d.cats.maintenance.includes(c)||d.cats.maintenance.push(c))}return d}}catch(e){}const v=newV('My Vehicle','');return{v:[v],act:v.id,cats:DEF,m7:1,pin:null,lastBackup:null,user:null}}
 let db=load();
-const lsave=()=>{try{localStorage.setItem(LS,JSON.stringify(db))}catch(e){alert('Storage is full. Export a JSON backup, then remove old photos.')}};
+const lsave=()=>{try{localStorage.setItem(LS,JSON.stringify(db))}catch(e){try{localStorage.setItem(LS,JSON.stringify(db,(k,v)=>k==='photos'||k==='img'?undefined:v))}catch(e2){alert('Storage is full. Export a JSON backup, then remove old photos.')}}};
 const save=()=>{lsave();push()};
 const V=()=>db.v.find(x=>x.id===db.act)||db.v[0];
 function toast(t){const e=$('#toast');e.textContent=t;e.classList.remove('hide');setTimeout(()=>e.classList.add('hide'),2200)}
@@ -56,7 +56,7 @@ function alerts(v){const a=[];
 const okImg=f=>f&&/^image\/(jpe?g|png|webp)$/i.test(f.type)&&/\.(jpe?g|png|webp)$/i.test(f.name);
 const thumbPic=f=>new Promise((ok,no)=>{if(!okImg(f))return no(Error('Only JPG, PNG or WEBP images are allowed.'));const r=new FileReader();r.onload=()=>{const i=new Image();i.onload=()=>{const s=Math.min(i.width,i.height),c=document.createElement('canvas');c.width=c.height=160;c.getContext('2d').drawImage(i,(i.width-s)/2,(i.height-s)/2,s,s,0,0,160,160);ok(c.toDataURL('image/jpeg',.75))};i.onerror=()=>no(Error('This image could not be read.'));i.src=r.result};r.readAsDataURL(f)});
 const pic=f=>new Promise((ok,no)=>{if(!okImg(f))return no(Error('Only JPG, PNG or WEBP images are allowed. Other files (APK, MP3, etc.) are blocked.'));
- const r=new FileReader();r.onload=()=>{const i=new Image();i.onload=()=>{const k=Math.min(1,900/Math.max(i.width,i.height)),c=document.createElement('canvas');c.width=i.width*k;c.height=i.height*k;c.getContext('2d').drawImage(i,0,0,c.width,c.height);ok(c.toDataURL('image/jpeg',.72))};i.onerror=()=>no(Error('This image could not be read.'));i.src=r.result};r.readAsDataURL(f)});
+ const r=new FileReader();r.onload=()=>{const i=new Image();i.onload=()=>{const k=Math.min(1,800/Math.max(i.width,i.height)),c=document.createElement('canvas');c.width=i.width*k;c.height=i.height*k;c.getContext('2d').drawImage(i,0,0,c.width,c.height);ok(c.toDataURL('image/jpeg',.68))};i.onerror=()=>no(Error('This image could not be read.'));i.src=r.result};r.readAsDataURL(f)});
 
 /* ---------- screens ---------- */
 function barChart(v){const m={},ks=[],MN=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'],add=(d,x)=>{const k=(d||'').slice(0,7);m[k]=(m[k]||0)+ +x};
@@ -88,7 +88,7 @@ const lastCard=v=>{const L=lastDone(v),o=odo(v),row=l=>`<div class=row><div>${es
  return`<div class=card><div class=hd>Last done</div>${L.length?L.slice(0,6).map(row).join('')+(L.length>6?`<details><summary class=sb>Show ${L.length-6} more</summary>${L.slice(6).map(row).join('')}</details>`:''):'<p class=sb>Your last water service, oil change, air check, fuel fill and more will show here once you log them.</p>'}</div>`};
 const PP=v=>{const P=v.partners;if(P.length<2)return'';const E=ents(v);return`<div class=card><div class=hd>Payments by partner</div>${P.map(p=>{const t=E.reduce((a,e)=>a+(e.pd[p]||0),0),sE=E.filter(e=>e.scope==='shared'),s=sE.reduce((a,e)=>a+(e.pd[p]||0),0),fs=sE.reduce((a,e)=>a+e.amt*((e.sh||{})[p]??100/P.length)/100,0),n=E.filter(e=>e.pd[p]>0).length;return`<div class=row><div>${esc(p)}<div class=sb>Shared paid ${money(s)} · Personal ${money(t-s)} · Fair share ${money(fs)} · ${n} entries</div></div><b>${money(t)}</b></div>`}).join('')}</div>`};
 const S={
-home(v){const L=v.logs,sum=t=>L.filter(l=>t.includes(l.t)).reduce((a,l)=>a+ +l.amt,0),tot=sum(Object.keys(TYPES)),m=mileage(v),al=alerts(v),o=odo(v),mo=L.filter(l=>l.date.slice(0,7)===today().slice(0,7)).reduce((a,l)=>a+ +l.amt,0);
+home(v){if(v.ph)return`<div class=card><div class=hd>No vehicle shared with you yet</div><p class=sb>Ask the admin to give you access to a vehicle. They can do it in Settings, Administrator panel, Vehicle access.</p></div>`;const L=v.logs,sum=t=>L.filter(l=>t.includes(l.t)).reduce((a,l)=>a+ +l.amt,0),tot=sum(Object.keys(TYPES)),m=mileage(v),al=alerts(v),o=odo(v),mo=L.filter(l=>l.date.slice(0,7)===today().slice(0,7)).reduce((a,l)=>a+ +l.amt,0);
  const lo=L.length?Math.min(...L.map(l=>+l.odo)):0,kms=o-Math.min(lo||o,+v.odo0||lo||o),cpk=kms>0?tot/kms:0,sv=due(v),lf=m.last,R=(k,x)=>`<div class=row><span class=sb>${k}</span><b>${x}</b></div>`;
  return`<div class="card hero"><div class=hr>${v.thumb&&/^data:image\//.test(v.thumb)?`<img class=hth src="${v.thumb}" alt="">`:'<div class="hth hph">🚘</div>'}<div><div class=sb>Odometer</div><div class=big>${o.toLocaleString('en-IN')} <small class=sb>km</small></div>${v.model?`<div class=sb>${esc(v.model)}</div>`:''}</div></div></div>
  ${al.length?`<div class="al ${al[0].c}"><b>${al.length} alert${al.length>1?'s':''}</b><div>${esc(al[0].t)}</div></div>`:'<div class="al ok">All papers and services are up to date.</div>'}
@@ -122,7 +122,7 @@ prof(v){const P=v.partners.join(', ');
  <label>Value<input name=v placeholder="5W-30, 3.5 L" required></label><div class=r2><label>Service every (km)<input type=number name=km></label><label>Service every (days)<input type=number name=days></label></div><button class=btn>Add spec</button></form>
  ${v.specs.map(s=>`<div class=row><div><b>${esc(s.g)}</b> · ${esc(s.k)}<div class=sb>${esc(s.v)}${+s.km?' · every '+s.km+' km':''}${+s.days?' · every '+s.days+' days':''}</div></div><span><button class=lk data-a=sedit data-id=${s.id}>Edit</button><button class="lk d" data-a=sdel data-id=${s.id}>Delete</button></span></div>`).join('')}</div>
  <div class=card><div class=hd>Gallery</div><form data-f=photo class=r2><label>Zone<select name=zone>${sel(ZONES)}</select></label><label>Photo<input type=file name=img accept="image/jpeg,image/png,image/webp" required></label><button class=btn style="grid-column:1/3">Add photo</button></form>
- <div class=ph>${Object.entries(v.photos).map(([z,d])=>`<div><img src="${d}" alt="${esc(z)}"><div class=row><span class=sb>${esc(z)}</span><button class="lk d" data-a=pdel data-id="${esc(z)}">Remove</button></div></div>`).join('')}</div></div>
+ <p class=sb style="margin:16px 0 10px">${Object.keys(v.photos).length?'Tap a photo to open, zoom, replace, move or delete it.':'No photos yet.'}</p><div class=ph>${ZONES.filter(z=>v.photos[z]).map(z=>`<button type=button class=gt data-a=gopen data-id="${esc(z)}"><img src="${v.photos[z]}" alt="${esc(z)}"><span>${esc(z)}</span></button>`).join('')}</div></div>
  <div class=card><div class=hd>Damage log</div><form data-f=dmg><div class=r2><label>Body zone<select name=zone>${sel(ZONES)}</select></label><label>Date<input type=date name=date value="${today()}"></label></div><label>What happened<input name=note required></label><button class=btn>Add damage</button></form>
  ${v.damages.map(d=>`<div class=row><div>${esc(d.zone)}<div class=sb>${d.date} · ${esc(d.note)}</div></div><span><button class="lk" data-a=dtog data-id=${d.id}>${d.status==='Fixed'?'Fixed':'Pending'}</button><button class="lk d" data-a=dmgdel data-id=${d.id}>Delete</button></span></div>`).join('')}</div>`},
 fin(v){const f=v.fin,pays=f.pays||[],L=v.logs,tot=t=>L.filter(l=>l.t===t).reduce((a,l)=>a+ +l.amt,0),emiPaid=(+f.paid||0)*(+f.emi||0)+pays.reduce((x,p)=>x+ +p.amt,0),acq=(+f.ex||0)+(+f.tax||0),up=+f.loan>0?(+f.down||0):acq,all=up+emiPaid+L.reduce((a,l)=>a+ +l.amt,0),net=ledger(v),left=Math.max(0,(+f.ten||0)-(+f.paid||0)-pays.length),ee=emiEdit&&pays.find(p=>p.id===emiEdit);
@@ -172,25 +172,28 @@ const cloud={
 const cj=o=>JSON.stringify(o,(k,v)=>v&&typeof v==='object'&&!Array.isArray(v)?Object.fromEntries(Object.keys(v).sort().map(x=>[x,v[x]])):v);
 const typing=()=>/INPUT|SELECT|TEXTAREA/.test(document.activeElement&&document.activeElement.tagName||'');
 const FS=()=>firebase.firestore(),hasLocal=()=>db.v.some(v=>v.logs.length||v.specs.length||v.docs.length||v.damages.length||v.rem.length);
-function flat(){const m={};db.v.forEach(v=>{const{photos,specs,docs,damages,logs,settles,rem,...x}=v;m['v_'+v.id]={_k:'veh',vid:v.id,...x};
+function flat(){const m={};db.v.forEach(v=>{if(v.ph)return;const{photos,specs,docs,damages,logs,settles,rem,...x}=v;Object.entries(photos||{}).forEach(([z,d])=>{const zi=ZONES.indexOf(z);if(zi>=0&&d)m['i_'+v.id+'_g'+zi]={_k:'img',vid:v.id,t:'g',z,d}});docs.forEach(i=>{if(i.img)m['i_'+v.id+'_d'+i.id]={_k:'img',vid:v.id,t:'d',ref:i.id,d:i.img}});m['v_'+v.id]={_k:'veh',vid:v.id,...x};
  [['l','log',logs],['s','spec',specs],['d','doc',docs],['g','dmg',damages],['t','settle',settles],['r','rem',rem]].forEach(([p,k,arr])=>arr.forEach(i=>{const{img,...y}=i;m[p+'_'+i.id]={_k:k,vid:v.id,...y}}))});
  m.cfg={_k:'cfg',cats:db.cats};return JSON.parse(JSON.stringify(m))}
 function applyRemote(){const R=Object.values(TM.remote),old=Object.fromEntries(db.v.map(v=>[v.id,v])),img={};db.v.forEach(v=>v.docs.forEach(d=>{img[d.id]=d.img}));
- const vs=R.filter(r=>r._k==='veh').map(r=>{const{_k,vid,...x}=r,o=old[x.id]||{};return{...newV(x.name,x.plate),...x,photos:o.photos||{}}});
+ const vs=R.filter(r=>r._k==='veh').map(r=>{const{_k,vid,...x}=r,o=old[x.id]||{},ph={};Object.entries(o.photos||{}).forEach(([z,d])=>{if(!TM.seen['i_'+x.id+'_g'+ZONES.indexOf(z)])ph[z]=d});return{...newV(x.name,x.plate),...x,photos:ph}});
  const MAP={log:'logs',spec:'specs',doc:'docs',dmg:'damages',settle:'settles',rem:'rem'};
- R.forEach(r=>{const a=MAP[r._k],v=a&&vs.find(x=>x.id===r.vid);if(!v)return;const{_k,vid,...x}=r;if(a==='docs'&&img[x.id])x.img=img[x.id];v[a].push(x)});
- const c=R.find(r=>r._k==='cfg');if(c)db.cats=c.cats;if(vs.length){db.v=vs;if(!vs.find(v=>v.id===db.act))db.act=vs[0].id}fix(db);lsave()}
+ R.forEach(r=>{const a=MAP[r._k],v=a&&vs.find(x=>x.id===r.vid);if(!v)return;const{_k,vid,...x}=r;if(a==='docs'&&img[x.id]&&!TM.seen['i_'+r.vid+'_d'+x.id])x.img=img[x.id];v[a].push(x)});
+ R.filter(r=>r._k==='img').forEach(r=>{const v=vs.find(x=>x.id===r.vid);if(!v)return;if(r.t==='g')v.photos[r.z]=r.d;else{const d=v.docs.find(x=>x.id===r.ref);if(d)d.img=r.d}});
+ const c=R.find(r=>r._k==='cfg');if(c)db.cats=c.cats;
+ if(vs.length)db.v=vs;else if(TM.role!=='admin'&&TM.vehicles!==undefined){const p=newV('No vehicle shared yet','');p.ph=true;db.v=[p]}
+ if(!db.v.find(v=>v.id===db.act))db.act=db.v[0].id;fix(db);lsave()}
 const PERMS=[['addEntries','Add fuel, maintenance and expense entries, reminders and damage records',true,'adding entries, reminders and damage records'],['editEntries','Edit entries, reminders and damage records',false,'editing entries'],['deleteEntries','Delete entries, reminders and damage records',false,'deleting entries'],['specsDocs','Add, edit or delete specs and documents',false,'specs and documents'],['vehicleDetails','Edit vehicle details, partners and finance (EMI)',false,'vehicle details and finance'],['settleUp','Settle up the partner ledger',false,'settle up'],['categories','Change categories',false,'categories'],['vehicles','Add or delete vehicles',false,'adding or deleting vehicles']];
 const pm=(k,d)=>TM.perms[k]===undefined?d:!!TM.perms[k];
-function can(x){const op=x[0],d=op==='set'?x[2]:TM.remote[x[1]]||{},kd=d._k,st=op==='del'?'del':x[1] in TM.sent?'upd':'new',E=['log','rem','dmg'].includes(kd),SD=['spec','doc'].includes(kd);
- if(pm('vehicles',false)&&st!=='upd')return true;
- if(st==='new')return kd!=='veh'&&(('v_'+d.vid) in TM.sent)&&(E?pm('addEntries',true):SD?pm('specsDocs',false):kd==='settle'?pm('settleUp',false):false);
- if(st==='upd')return E?pm('editEntries',false):SD?pm('specsDocs',false):kd==='veh'?pm('vehicleDetails',false):kd==='cfg'?pm('categories',false):false;
- return E?pm('deleteEntries',false):SD?pm('specsDocs',false):kd==='settle'?pm('settleUp',false):false}
+function can(x){const op=x[0],d=op==='set'?x[2]:TM.remote[x[1]]||{},kd=d._k,st=op==='del'?'del':x[1] in TM.sent?'upd':'new',E=['log','rem','dmg'].includes(kd),SD=['spec','doc'].includes(kd),IM=kd==='img'?(d.t==='g'?pm('vehicleDetails',false):pm('specsDocs',false)):false;
+ if(pm('vehicles',false)&&st==='del')return true;
+ if(st==='new')return kd!=='veh'&&(('v_'+d.vid) in TM.sent)&&(E?pm('addEntries',true):SD?pm('specsDocs',false):kd==='settle'?pm('settleUp',false):IM);
+ if(st==='upd')return E?pm('editEntries',false):SD?pm('specsDocs',false):kd==='veh'?pm('vehicleDetails',false):kd==='cfg'?pm('categories',false):IM;
+ return E?pm('deleteEntries',false):SD?pm('specsDocs',false):kd==='settle'?pm('settleUp',false):IM}
 const permText=()=>{const f=PERMS.filter(p=>pm(p[0],p[2])).map(p=>p[3]),n=PERMS.filter(p=>!pm(p[0],p[2])).map(p=>p[3]);return'Without approval: '+(f.join(', ')||'nothing')+'. Needs admin approval: '+(n.join(', ')||'nothing')+'.'};
 let pt=null;
-const KN={veh:'vehicle',log:'entry',spec:'spec',doc:'document',dmg:'damage record',settle:'settlement',rem:'reminder',cfg:'categories'};
-function descr(x){const d=x[0]==='set'?x[2]:TM.remote[x[1]]||{},nm=d.name||(d.cat?d.cat+' '+d.amt:'')||d.k||d.type||d.title||d.note||'';return(x[0]==='del'?'Delete ':x[1] in TM.sent?'Edit ':'Add ')+(KN[d._k]||'item')+(nm?' ('+nm+')':'')}
+const KN={veh:'vehicle',log:'entry',spec:'spec',doc:'document',dmg:'damage record',settle:'settlement',rem:'reminder',cfg:'categories',img:'picture'};
+function descr(x){const d=x[0]==='set'?x[2]:TM.remote[x[1]]||{},nm=d.name||d.z||(d.cat?d.cat+' '+d.amt:'')||d.k||d.type||d.title||d.note||'';return(x[0]==='del'?'Delete ':x[1] in TM.sent?'Edit ':'Add ')+(KN[d._k]||'item')+(nm?' ('+nm+')':'')}
 async function sendReq(req){const ops=req.map(x=>x[0]==='set'?{op:'set',key:x[1],json:JSON.stringify(x[2])}:{op:'del',key:x[1]}),js=JSON.stringify(ops);if(js.length>900000)throw Error('This change is too large to send for approval. Ask the admin to make it.');
  await FS().collection('requests').add({by:TM.uid,byEmail:db.user,label:req.slice(0,3).map(descr).join('; ')+(req.length>3?' +'+(req.length-3)+' more':''),ops:js,status:'pending',at:Date.now()})}
 function push(){clearTimeout(pt);if(!TM.on)return;pt=setTimeout(async()=>{if(!TM.on)return;
@@ -199,22 +202,32 @@ function push(){clearTimeout(pt);if(!TM.on)return;pt=setTimeout(async()=>{if(!TM
  const mem=TM.role!=='admin',okd=can,direct=mem?w.filter(okd):w,req=mem?w.filter(x=>!okd(x)):[];
  try{const fs=FS(),c=fs.collection('hub');
   for(let i=0;i<direct.length;i+=400){const b=fs.batch();direct.slice(i,i+400).forEach(x=>x[0]==='set'?b.set(c.doc(x[1]),x[2]):b.delete(c.doc(x[1])));await b.commit()}
-  direct.forEach(x=>{if(x[0]==='set'){TM.sent[x[1]]=cj(x[2]);TM.remote[x[1]]=JSON.parse(JSON.stringify(x[2]))}else{delete TM.sent[x[1]];delete TM.remote[x[1]]}});
+  direct.forEach(x=>{if(x[1].startsWith('i_'))TM.seen[x[1]]=1;if(x[0]==='set'){TM.sent[x[1]]=cj(x[2]);TM.remote[x[1]]=JSON.parse(JSON.stringify(x[2]))}else{delete TM.sent[x[1]];delete TM.remote[x[1]]}});
   if(req.length){await sendReq(req);applyRemote();render(true);toast('Sent to the admin for approval')}
   db.lastBackup=Date.now();lsave()}
  catch(e){if(/permission/i.test((e.code||'')+(e.message||''))){alert('You do not have permission for this change.');applyRemote();render(true)}else toast(e.message&&!e.code?e.message:'Could not sync. Will retry when online.')}},800)}
 async function teamEnsure(u){await F_();const r=FS().collection('users').doc(u.uid),s=await r.get();if(!s.exists)await r.set({email:u.email,name:(u.email||'').split('@')[0],status:'pending',role:'member'})}
-function hubStop(){if(TM.hub){TM.hub();TM.hub=null}TM.on=false;TM.remote={};TM.sent={}}
-function teamStop(){['un','uu','rq','hub'].forEach(k=>{if(TM[k]){TM[k]();TM[k]=null}});TM.on=false;TM.remote={};TM.sent={};TM.users=[];TM.role=TM.status=null;TM.declined=false}
-function hubStart(){if(TM.hub)return;let first=true;TM.hub=FS().collection('hub').onSnapshot(snap=>{
- snap.docChanges().forEach(c=>{if(c.type==='removed'){delete TM.remote[c.doc.id];delete TM.sent[c.doc.id]}else{const d=c.doc.data();TM.remote[c.doc.id]=d;TM.sent[c.doc.id]=cj(d)}});
- if(first){first=false;
-  if(snap.empty){TM.on=true;db.team=TM.uid;lsave();if(TM.role==='admin')push()}
-  else{if(db.team!==TM.uid&&hasLocal()&&!confirm("The team already has data. This device's own data will be replaced. Export a JSON backup first if you want to keep it. Replace now?")){hubStop();TM.declined=true;render(true);return}
-   TM.on=true;db.team=TM.uid;applyRemote();render(true)}
-  return}
- if(!snap.metadata.hasPendingWrites){applyRemote();typing()?TM.pend=true:render(true)}},()=>toast('Sync error'))}
-function teamWatch(u){teamStop();TM.uid=u.uid;TM.un=FS().collection('users').doc(u.uid).onSnapshot(s=>{const d=s.data()||{};TM.role=d.role;TM.perms=d.perms||{};TM.status=s.exists?d.status:'removed';
+function hubStop(){Object.values(TM.hubs||{}).forEach(u=>u());TM.hubs={};TM.on=false;TM.gated=false;TM.remote={};TM.sent={}}
+function teamStop(){['un','uu','rq'].forEach(k=>{if(TM[k]){TM[k]();TM[k]=null}});hubStop();TM.seen={};TM.users=[];TM.vehicles=undefined;TM.role=TM.status=null;TM.declined=false}
+function absorb(snap){snap.docChanges().forEach(c=>{const id=c.doc.id;if(c.type==='removed'){delete TM.remote[id];delete TM.sent[id]}else{const d=c.doc.data();TM.remote[id]=d;TM.sent[id]=cj(d);if(id.startsWith('i_'))TM.seen[id]=1}})}
+function gate(empty){if(TM.gated)return true;TM.gated=true;
+ if(empty){TM.on=true;db.team=TM.uid;lsave();if(TM.role==='admin')push();return true}
+ if(db.team!==TM.uid&&hasLocal()&&!confirm("The team already has data. This device's own data will be replaced. Export a JSON backup first if you want to keep it. Replace now?")){hubStop();TM.declined=true;render(true);return false}
+ TM.on=true;db.team=TM.uid;return true}
+function dropVid(vid){Object.keys(TM.remote).forEach(k=>{if(TM.remote[k].vid===vid){delete TM.remote[k];delete TM.sent[k]}})}
+function hubStart(){const full=TM.role==='admin'||TM.vehicles===undefined,want=full?['*']:[...TM.vehicles,'cfg'],H=TM.hubs,c=FS().collection('hub');let drop=false;
+ Object.keys(H).forEach(k=>{if(!want.includes(k)){H[k]();delete H[k];drop=true;if(k==='*'){TM.remote={};TM.sent={}}else dropVid(k)}});
+ const handle=(snap,empty)=>{const first=!TM.gated;if(!gate(empty))return;if(first){if(!empty){applyRemote();render(true)}}else if(!snap.metadata.hasPendingWrites){applyRemote();typing()?TM.pend=true:render(true)}},err=()=>toast('Sync error');
+ want.forEach(k=>{if(H[k])return;
+  if(k==='*')H[k]=c.onSnapshot(s=>{absorb(s);handle(s,s.empty)},err);
+  else if(k==='cfg')H[k]=c.doc('cfg').onSnapshot(s=>{if(s.exists){TM.remote.cfg=s.data();TM.sent.cfg=cj(s.data())}else{delete TM.remote.cfg;delete TM.sent.cfg}handle(s,false)},err);
+  else H[k]=c.where('vid','==',k).onSnapshot(s=>{absorb(s);handle(s,false)},err)});
+ if(drop&&TM.gated){applyRemote();render(true)}}
+async function ensureLists(){const ids=Object.keys(TM.sent).filter(k=>k.startsWith('v_')).map(k=>k.slice(2)),fs=FS(),b=fs.batch();let n=0;TM.users.filter(m=>m.status==='approved'&&m.role!=='admin'&&m.vehicles===undefined).forEach(m=>{b.update(fs.collection('users').doc(m.id),{vehicles:ids});n++});if(n)await b.commit()}
+async function setVis(u,vid,on){await ensureLists();const f=firebase.firestore.FieldValue;await FS().collection('users').doc(u).update({vehicles:on?f.arrayUnion(vid):f.arrayRemove(vid)})}
+function vaccess(){const mem=TM.users.filter(m=>m.status==='approved'&&m.role!=='admin');
+ return`<div class=hd style="font-size:15px;margin-top:16px">Vehicle access</div><p class=sb>Ticked = that person can see the vehicle. A new vehicle is visible only to you until you tick people.</p>${mem.length?db.v.filter(v=>!v.ph).map(v=>`<details data-pm="va_${v.id}" ${TM.open['va_'+v.id]?'open':''}><summary class=sb>${esc(v.name)} ${esc(v.plate||'')}</summary>${mem.map(m=>`<label class=ck2><input type=checkbox data-vis="${m.id}|${v.id}" ${m.vehicles===undefined||m.vehicles.includes(v.id)?'checked':''}><span>${esc(m.email)}</span></label>`).join('')}</details>`).join(''):'<p class=sb>No approved members yet.</p>'}`}
+function teamWatch(u){teamStop();TM.uid=u.uid;TM.un=FS().collection('users').doc(u.uid).onSnapshot(s=>{const d=s.data()||{};TM.role=d.role;TM.perms=d.perms||{};TM.vehicles=d.vehicles;TM.status=s.exists?d.status:'removed';
  if(d.status==='approved'){hubStart();const rr=d.role==='admin'||d.role==='member'?d.role:null;if(TM.rq&&TM.rqr!==rr){TM.rq();TM.rq=null;TM.reqs=[]}
   if(rr&&!TM.rq){TM.rqr=rr;const rc=FS().collection('requests');TM.rq=(rr==='admin'?rc:rc.where('by','==',TM.uid)).onSnapshot(q=>{TM.reqs=q.docs.map(x=>({id:x.id,...x.data()})).sort((x,y)=>(y.at||0)-(x.at||0));if(!typing())render(true)},()=>{})}
   if(d.role==='admin'&&!TM.uu)TM.uu=FS().collection('users').onSnapshot(q=>{TM.users=q.docs.map(x=>({id:x.id,...x.data()})).sort((x,y)=>(x.status==='pending'?0:1)-(y.status==='pending'?0:1));if(!typing())render(true)},()=>{});
@@ -225,12 +238,12 @@ async function autoTeam(){const c=window.FIREBASE_CONFIG;if(!db.user||!c||/YOUR/
 const catsHtml=()=>Object.keys(TYPES).map(t=>`<div class=sb style="margin-top:8px"><b>${TYPES[t]}</b></div>${(db.cats[t]||[]).map((c,i)=>`<div class=row><span>${esc(c)}</span><span><button class=lk data-a=cedit data-t=${t} data-id=${i}>Edit</button><button class="lk d" data-a=cdel data-t=${t} data-id=${i}>Delete</button></span></div>`).join('')}<form data-f=cat class=r2><input type=hidden name=t value=${t}><input name=n placeholder="New category" required><button class="btn g" style="margin:0">Add</button></form>`).join('');
 const opsLabel=r=>{try{const o=JSON.parse(r.ops).map(p=>p.op==='set'?['set',p.key,JSON.parse(p.json)]:['del',p.key]);return o.slice(0,4).map(descr).join('; ')+(o.length>4?' +'+(o.length-4)+' more':'')}catch(e){return'Unreadable request'}};
 async function rqDo(r,ok){const fs=FS();if(!ok){await fs.collection('requests').doc(r.id).update({status:'rejected',decidedAt:Date.now(),decidedBy:db.user});return}
- const ops=JSON.parse(r.ops),c=fs.collection('hub');if(!ops.every(o=>/^([vlsdgtr]_[A-Za-z0-9]+|cfg)$/.test(o.key)))throw Error('This request has unexpected data and was not applied.');
+ const ops=JSON.parse(r.ops),c=fs.collection('hub');if(!ops.every(o=>/^([vlsdgtri]_[A-Za-z0-9_]+|cfg)$/.test(o.key)))throw Error('This request has unexpected data and was not applied.');
  for(let i=0;i<ops.length;i+=400){const b=fs.batch();ops.slice(i,i+400).forEach(o=>o.op==='set'?b.set(c.doc(o.key),JSON.parse(o.json)):b.delete(c.doc(o.key)));if(i+400>=ops.length)b.update(fs.collection('requests').doc(r.id),{status:'approved',decidedAt:Date.now(),decidedBy:db.user});await b.commit()}}
 function adminHtml(){if(Date.now()-(TM.adminOk||0)>3e5)return`<p class=sb>For privacy, confirm your password to open this section. It locks again after 5 minutes or when you leave the app.</p><form data-f=adminpw><label>Password<input type=password name=p required autocomplete=current-password></label><button class=btn>Unlock</button></form>`;
  const rq=TM.reqs.filter(r=>r.status==='pending'),dn=TM.reqs.filter(r=>r.status!=='pending').slice(0,5),ns=rq.filter(r=>TM.sel[r.id]).length;
  return`<div class=hd style="font-size:15px">Approval requests (${rq.length})</div>${rq.length?`<button class=lk data-a=rqsel>${ns===rq.length?'Clear selection':'Select all'}</button>`+rq.map(r=>`<label class=ck2><input type=checkbox data-rq="${r.id}" ${TM.sel[r.id]?'checked':''}><span>${esc(opsLabel(r))}<small class=sb>${esc(r.byEmail)} · ${new Date(r.at).toLocaleString()}</small></span></label>`).join('')+`<div class=r2><button class=btn data-a=rqapp>Approve selected (${ns})</button><button class="btn g" data-a=rqrej>Reject selected</button></div>`:'<p class=sb>No requests waiting.</p>'}${dn.length?`<div class=sb style="margin-top:8px">Recent decisions</div>${dn.map(r=>`<div class=row><span class=sb>${esc(r.label)}</span><span class="pill ${r.status==='approved'?'':'bad'}">${esc(r.status)}</span></div>`).join('')}`:''}
- <div class=hd style="font-size:15px;margin-top:16px">People · ${TM.users.filter(m=>m.status==='pending').length} waiting</div>${TM.users.map(m=>`<div class=row style="flex-wrap:wrap"><div>${esc(m.email)}<div class=sb>${esc(m.role)} · ${esc(m.status)}</div></div>${m.id===TM.uid?'<span class=sb>You</span>':`<span style="width:100%">${m.status==='approved'?tb(m.id,'status','blocked','Block','d'):tb(m.id,'status','approved','Approve')}${m.role!=='member'?tb(m.id,'role','member','Member'):''}${m.role!=='viewer'?tb(m.id,'role','viewer','Viewer'):''}${m.role!=='admin'?tb(m.id,'role','admin','Admin'):''}<button class="lk d" data-a=tmdel data-id="${m.id}">Remove</button></span>${m.role==='member'&&m.status==='approved'?`<details data-pm="${m.id}" ${TM.open[m.id]?'open':''} style="width:100%"><summary class=sb>What ${esc(m.email.split('@')[0])} can do without approval</summary><div class=sb style="margin:6px 0">Ticked = allowed without your approval. Unticked = needs your approval.</div>${PERMS.map(p=>`<label class=ck2><input type=checkbox data-perm="${m.id}|${p[0]}" ${(m.perms&&m.perms[p[0]]!==undefined?m.perms[p[0]]:p[2])?'checked':''}><span>${p[1]}</span></label>`).join('')}<button class=lk data-a=pmset data-id="${m.id}|all">Allow all</button><button class=lk data-a=pmset data-id="${m.id}|def">Reset to default</button></details>`:''}`}</div>`).join('')}<button class="btn g" data-a=alock>Lock now</button>`}
+ <div class=hd style="font-size:15px;margin-top:16px">People · ${TM.users.filter(m=>m.status==='pending').length} waiting</div>${TM.users.map(m=>`<div class=row style="flex-wrap:wrap"><div>${esc(m.email)}<div class=sb>${esc(m.role)} · ${esc(m.status)}</div></div>${m.id===TM.uid?'<span class=sb>You</span>':`<span style="width:100%">${m.status==='approved'?tb(m.id,'status','blocked','Block','d'):tb(m.id,'status','approved','Approve')}${m.role!=='member'?tb(m.id,'role','member','Member'):''}${m.role!=='viewer'?tb(m.id,'role','viewer','Viewer'):''}${m.role!=='admin'?tb(m.id,'role','admin','Admin'):''}<button class="lk d" data-a=tmdel data-id="${m.id}">Remove</button></span>${m.role==='member'&&m.status==='approved'?`<details data-pm="${m.id}" ${TM.open[m.id]?'open':''} style="width:100%"><summary class=sb>What ${esc(m.email.split('@')[0])} can do without approval</summary><div class=sb style="margin:6px 0">Ticked = allowed without your approval. Unticked = needs your approval.</div>${PERMS.map(p=>`<label class=ck2><input type=checkbox data-perm="${m.id}|${p[0]}" ${(m.perms&&m.perms[p[0]]!==undefined?m.perms[p[0]]:p[2])?'checked':''}><span>${p[1]}</span></label>`).join('')}<button class=lk data-a=pmset data-id="${m.id}|all">Allow all</button><button class=lk data-a=pmset data-id="${m.id}|def">Reset to default</button></details>`:''}`}</div>`).join('')}${vaccess()}<button class="btn g" data-a=alock>Lock now</button>`}
 function showModal(){if(!MD)return;$('#mt').textContent=MD.t;$('#mb').innerHTML=MD.fn();$('#modal').classList.remove('hide')}
 const openModal=(t,fn)=>{MD={t,fn};showModal()},closeModal=()=>{MD=null;$('#modal').classList.add('hide')};
 document.addEventListener('click',e=>{if(e.target.id==='modal')closeModal()});
@@ -238,10 +251,11 @@ document.addEventListener('visibilitychange',()=>{if(document.hidden&&TM.adminOk
 const tb=(u,f,v,l,c)=>`<button class="lk ${c||''}" data-a=tm data-id="${u}|${f}|${v}">${l}</button>`;
 function teamCard(){if(!db.user)return`<div class=card><div class=hd>Team</div><p class=sb>Sign in or register in the Account card above to join your team. After the admin approves you, your data syncs between everyone.</p></div>`;
  const st=TM.status,msg=TM.declined?'Sync is off on this device. Sign out and sign in again to retry.':!st?'Connecting...':st==='approved'?'Approved as <b>'+esc(TM.role)+'</b>.':st==='blocked'?'Your access is blocked. Contact the admin.':st==='removed'?'Your access was removed. Sign out and register again to ask for access.':'Waiting for the admin to approve you.';
- return`<div class=card><div class=hd>Team ${TM.on?'<span class=pill>Synced</span>':''}</div><p>${msg}</p>${TM.role==='viewer'&&st==='approved'?'<p class=sb>Read-only: you can view shared data but not change it.</p>':''}<p class=sb>Photos and document images stay on each device for now.</p>${TM.role==='member'&&st==='approved'?`<p class=sb>${esc(permText())}</p>${TM.reqs.slice(0,5).map(r=>`<div class=row><span class=sb>${esc(r.label)}</span><span class="pill ${r.status==='approved'?'':r.status==='rejected'?'bad':'warn'}">${esc(r.status)}</span></div>`).join('')}`:''}
+ return`<div class=card><div class=hd>Team ${TM.on?'<span class=pill>Synced</span>':''}</div><p>${msg}</p>${TM.role==='viewer'&&st==='approved'?'<p class=sb>Read-only: you can view shared data but not change it.</p>':''}<p class=sb>Photos and document images sync when you are online.</p>${TM.role==='member'&&st==='approved'?`<p class=sb>${esc(permText())}</p>${TM.reqs.slice(0,5).map(r=>`<div class=row><span class=sb>${esc(r.label)}</span><span class="pill ${r.status==='approved'?'':r.status==='rejected'?'bad':'warn'}">${esc(r.status)}</span></div>`).join('')}`:''}
  ${TM.role==='admin'&&st==='approved'?`<p class=sb>${TM.users.length} people · ${TM.users.filter(m=>m.status==='pending').length} waiting · ${TM.reqs.filter(r=>r.status==='pending').length} changes to approve</p><button class=btn data-a=admin>Administrator panel</button>`:''}</div>`}
 document.addEventListener('change',e=>{const t=e.target,d=t.dataset||{};
  if(d.rq){t.checked?TM.sel[d.rq]=1:delete TM.sel[d.rq];showModal()}
+ if(d.vis){const[u,vi]=d.vis.split('|');setVis(u,vi,t.checked).catch(x=>alert(x.message))}
  if(d.perm){const[u,k]=d.perm.split('|');FS().collection('users').doc(u).update({['perms.'+k]:t.checked}).catch(x=>alert(x.message))}});
 document.addEventListener('toggle',e=>{const t=e.target;if(t.dataset&&t.dataset.pm)TM.open[t.dataset.pm]=t.open},true);
 document.addEventListener('focusout',()=>setTimeout(()=>{if(TM.pend&&!typing()){TM.pend=false;render(true)}},400));
@@ -252,15 +266,15 @@ const A={
  nav:id=>{scr=id;if(id!=='add')editId=null;render()},tab:id=>{type=id;render()},cancel:()=>{editId=null;scr='logs';render()},close:()=>$('#panel').classList.add('hide'),
  svc:id=>{const s=V().specs.find(x=>x.id===id);s.lastOdo=odo(V());s.lastDate=today();save();render();if(!$('#panel').classList.contains('hide'))panel()},
  rdone:id=>{V().rem.find(x=>x.id===id).done=true;save();render();if(!$('#panel').classList.contains('hide'))panel()},
- rdel:id=>{V().rem=V().rem.filter(x=>x.id!==id);save();render()},
+ rdel:id=>{if(!confirm('Delete this reminder?'))return;V().rem=V().rem.filter(x=>x.id!==id);save();render()},
  ddel:id=>confirm('Delete this document?')&&(V().docs=V().docs.filter(x=>x.id!==id),save(),render()),
- view:id=>{const d=V().docs.find(x=>x.id===id);open().document.write(`<img src="${d.img}" style="max-width:100%">`)},
+ view:id=>{const d=V().docs.find(x=>x.id===id);if(d&&d.img)lbOpen([{k:'d',key:d.id,src:d.img,label:d.type}],0)},
  sdel:id=>confirm('Delete this spec?')&&(V().specs=V().specs.filter(x=>x.id!==id),save(),render()),
  sedit:id=>{const s=V().specs.find(x=>x.id===id),n=prompt('Value for '+s.k,s.v);if(n){s.v=n;save();render()}},
  share:()=>{const v=V(),g={};v.specs.forEach(s=>(g[s.g]=g[s.g]||[]).push(`${s.k}: ${s.v}`));const t=`${v.name} ${v.plate}\n${v.model}\n\n`+Object.entries(g).map(([k,a])=>k+'\n'+a.join('\n')).join('\n\n');
   navigator.share?navigator.share({title:v.name,text:t}).catch(()=>{}):navigator.clipboard.writeText(t).then(()=>toast('Copied to clipboard'))},
  pdel:id=>{delete V().photos[id];save();render()},dtog:id=>{const d=V().damages.find(x=>x.id===id);d.status=d.status==='Fixed'?'Pending':'Fixed';save();render()},
- dmgdel:id=>{V().damages=V().damages.filter(x=>x.id!==id);save();render()},
+ dmgdel:id=>{if(!confirm('Delete this damage record?'))return;V().damages=V().damages.filter(x=>x.id!==id);save();render()},
  emiedit:id=>{emiEdit=id;render();$('[data-f=emi]').scrollIntoView()},emicancel:()=>{emiEdit=null;render()},emidel:id=>confirm('Delete this EMI payment?')&&(V().fin.pays=V().fin.pays.filter(p=>p.id!==id),save(),render()),
  settle:()=>{const v=V(),n=ledger(v);if(Object.values(n).every(x=>Math.abs(x)<.5))return toast('Already settled');if(confirm('Record a settlement and reset the balance to ₹0?')){v.settles.push({id:uid(),date:today(),net:n});save();render()}},
  undo:id=>{V().settles=V().settles.filter(x=>x.id!==id);save();render()},
@@ -269,20 +283,28 @@ const A={
  pdf:()=>{const v=V(),r=filt(v),w=open('','_blank');if(!w)return alert('Allow pop-ups to save a PDF.');w.document.write(`<title>${esc(v.name)} history</title><style>body{font:12px sans-serif}table{border-collapse:collapse;width:100%}td,th{border:1px solid #999;padding:4px;text-align:left}</style><h2>${esc(v.name)} ${esc(v.plate)}</h2><table><tr><th>Date<th>Type<th>Category<th>Amount<th>Odo<th>Note</tr>${r.map(l=>`<tr><td>${l.date}<td>${TYPES[l.t]}<td>${esc(l.cat)}<td>${l.amt}<td>${l.odo}<td>${esc(l.note)}</tr>`).join('')}</table><p><b>Total: ${money(r.reduce((a,l)=>a+ +l.amt,0))}</b></p>`);w.document.close();w.print()},
  cedit:(id,b)=>{const t=b.dataset.t,n=prompt('Rename category',db.cats[t][id]);if(n&&n.trim()){db.cats[t][id]=n.trim();save();render()}},
  cdel:(id,b)=>{const t=b.dataset.t;confirm('Delete "'+db.cats[t][id]+'"?')&&(db.cats[t].splice(id,1),save(),render())},
- pinoff:()=>{db.pin=null;localStorage.removeItem('mk_ok');save();render()},signout:()=>confirm('Sign out?')&&cloud.out(),pwreset:guard(async()=>{const e=prompt('Enter your account email');if(!e)return;const f=await F_();await f.auth().sendPasswordResetEmail(e);alert('If this email has an account, a reset link was sent.')}),vsw:id=>{db.act=id;lsave();render()},thumbdel:()=>{delete V().thumb;save();render()},
+ pinoff:()=>{db.pin=null;localStorage.removeItem('mk_ok');save();render()},signout:()=>confirm('Sign out?')&&cloud.out(),pwreset:guard(async()=>{const e=prompt('Enter your account email');if(!e)return;const f=await F_();await f.auth().sendPasswordResetEmail(e);alert('If this email has an account, a reset link was sent.')}),gopen:id=>{const l=gal();lbOpen(l,Math.max(0,l.findIndex(x=>x.key===id)))},lbx:()=>lbClose(),lbprev:()=>lbGo(-1),lbnext:()=>lbGo(1),
+ lbrep:()=>$('#lbf').click(),
+ lbrot:()=>{const it=LB.list[LB.i],im=new Image();im.onload=()=>{const c=document.createElement('canvas');c.width=im.height;c.height=im.width;const x=c.getContext('2d');x.translate(c.width/2,c.height/2);x.rotate(Math.PI/2);x.drawImage(im,-im.width/2,-im.height/2);V().photos[it.key]=c.toDataURL('image/jpeg',.8);save();render();lbReload(it.key)};im.src=it.src},
+ lbmc:()=>$('#lbzr').classList.add('hide'),
+ lbmove:()=>{const it=LB.list[LB.i];$('#lbz').innerHTML=ZONES.map(z=>`<option ${z===it.key?'selected':''}>${z}</option>`).join('');$('#lbzr').classList.remove('hide')},
+ lbmv:()=>{const v=V(),it=LB.list[LB.i],z2=$('#lbz').value;if(z2===it.key)return $('#lbzr').classList.add('hide');if(v.photos[z2]&&!confirm('There is already a photo in "'+z2+'". Replace it?'))return;v.photos[z2]=v.photos[it.key];delete v.photos[it.key];save();render();lbReload(z2)},
+ lbdel:()=>{const it=LB.list[LB.i];if(!confirm('Delete the "'+it.key+'" photo? This cannot be undone.'))return;delete V().photos[it.key];save();render();const l=gal();if(!l.length)lbClose();else{LB.list=l;LB.i=Math.min(LB.i,l.length-1);lbShow()}},
+ lbsave:()=>{const it=LB.list[LB.i],x=document.createElement('a');x.href=it.src;x.download=(V().name||'photo')+'-'+it.label+'.jpg';x.click()},
+ vsw:id=>{db.act=id;lsave();render()},thumbdel:()=>{delete V().thumb;save();render()},
  cats:()=>openModal('Categories',catsHtml),mclose:closeModal,alock:()=>{TM.adminOk=0;showModal()},
  admin:()=>{if(TM.role==='admin'&&TM.status==='approved')openModal('Administrator',adminHtml)},
  rqsel:()=>{const rq=TM.reqs.filter(r=>r.status==='pending'),all=rq.length&&rq.every(r=>TM.sel[r.id]);TM.sel={};if(!all)rq.forEach(r=>TM.sel[r.id]=1);showModal()},
  rqapp:guard(async()=>{const ids=TM.reqs.filter(r=>r.status==='pending'&&TM.sel[r.id]);if(!ids.length)return alert('Tick at least one request first.');if(!confirm('Approve '+ids.length+' selected change request(s)?'))return;for(const r of ids)await rqDo(r,true);TM.sel={};applyRemote();render(true);toast('Approved')}),
  rqrej:guard(async()=>{const ids=TM.reqs.filter(r=>r.status==='pending'&&TM.sel[r.id]);if(!ids.length)return alert('Tick at least one request first.');if(!confirm('Reject '+ids.length+' selected change request(s)?'))return;for(const r of ids)await rqDo(r,false);TM.sel={};toast('Rejected')}),
  pmset:guard(async id=>{const[u,t]=id.split('|'),o={};PERMS.forEach(p=>o[p[0]]=t==='all'?true:p[2]);await FS().collection('users').doc(u).update({perms:o});toast('Saved')}),
- tm:guard(async id=>{const[u,f,v]=id.split('|'),m=TM.users.find(x=>x.id===u);if(!confirm('Set '+f+' to "'+v+'" for '+(m?m.email:'this person')+'?'))return;await FS().collection('users').doc(u).update({[f]:v});toast('Updated')}),
+ tm:guard(async id=>{const[u,f,v]=id.split('|'),m=TM.users.find(x=>x.id===u);if(!confirm('Set '+f+' to "'+v+'" for '+(m?m.email:'this person')+'?'))return;await FS().collection('users').doc(u).update(f==='status'&&v==='approved'&&m&&m.vehicles===undefined&&m.role!=='admin'?{[f]:v,vehicles:[]}:{[f]:v});toast('Updated')}),
  tmdel:guard(async id=>{if(confirm('Remove this member? They can ask for access again.'))await FS().collection('users').doc(id).delete()}),
  jx:()=>{const d=JSON.parse(JSON.stringify(db));delete d.pin;dl('vehiclehub-backup-'+today()+'.json',JSON.stringify(d),'application/json');db.lastBackup=Date.now();save();render()}
 };
 document.addEventListener('click',e=>{const b=e.target.closest('[data-a]');if(b)A[b.dataset.a]?.(b.dataset.id,b)});
 $('#bell').onclick=panel;
-$('#vadd').onclick=()=>{const n=prompt('Vehicle name');if(!n)return;const v=newV(n,(prompt('Plate number (optional)')||'').toUpperCase());db.v.push(v);db.act=v.id;save();scr='prof';render()};
+$('#vadd').onclick=()=>{const n=prompt('Vehicle name');if(!n)return;const v=newV(n,(prompt('Plate number (optional)')||'').toUpperCase());if(TM.on&&TM.role==='admin')ensureLists().catch(()=>{});db.v.filter(x=>x.ph).forEach(x=>db.v.splice(db.v.indexOf(x),1));db.v.push(v);db.act=v.id;save();scr='prof';render()};
 $('#vdel').onclick=()=>{if(db.v.length<2)return alert('Keep at least one vehicle.');const v=V();if(confirm(`Delete ${v.name} and all its data?`)){db.v=db.v.filter(x=>x!==v);db.act=db.v[0].id;save();render()}};
 document.addEventListener('input',e=>{if(e.target.id==='q'){F.q=e.target.value;list()}});
 document.addEventListener('change',e=>{if(e.target.id==='ft'){F.t=e.target.value;list()}if(e.target.id==='fs'){F.s=e.target.value;list()}
@@ -307,6 +329,27 @@ document.addEventListener('submit',async e=>{e.preventDefault();const f=new Form
 
 document.addEventListener('change',e=>{const t=e.target;if(t.form&&['scope','payer','splitm'].includes(t.name))syncPay(t.form);if(t.name==='cat'||t.name==='t')updHint()});
 document.addEventListener('input',e=>{const t=e.target;if(t.name&&t.name.startsWith('sh_')&&t.form.querySelectorAll('[name^=sh_]').length===2){const o=t.form.querySelector('[name='+(t.name==='sh_0'?'sh_1':'sh_0')+']');o.value=Math.round((100-(+t.value||0))*100)/100}});
+/* ---------- photo viewer ---------- */
+let LB=null,Z={s:1,x:0,y:0};
+const gal=()=>Object.entries(V().photos||{}).filter(([z,d])=>d).sort((p,q)=>ZONES.indexOf(p[0])-ZONES.indexOf(q[0])).map(([z,d])=>({k:'g',key:z,src:d,label:z}));
+function lbAp(){const w=$('#lbs').clientWidth,h=$('#lbs').clientHeight,mx=(Z.s-1)*w/2,my=(Z.s-1)*h/2;Z.x=Math.max(-mx,Math.min(mx,Z.x));Z.y=Math.max(-my,Math.min(my,Z.y));$('#lbi').style.transform=`translate(${Z.x}px,${Z.y}px) scale(${Z.s})`}
+function lbReset(){Z={s:1,x:0,y:0};lbAp()}
+function lbShow(){const it=LB.list[LB.i];lbReset();$('#lbi').src=it.src;$('#lbt').textContent=it.label;$('#lbn').textContent=LB.list.length>1?(LB.i+1)+' / '+LB.list.length:'';
+ document.querySelectorAll('.lbn').forEach(b=>b.classList.toggle('hide',LB.list.length<2));$('#lbzr').classList.add('hide');
+ $('#lbb').innerHTML=it.k==='g'&&TM.role!=='viewer'?'<button data-a=lbrep>Replace</button><button data-a=lbrot>Rotate</button><button data-a=lbmove>Move zone</button><button data-a=lbsave>Save</button><button class=dg data-a=lbdel>Delete</button>':'<button data-a=lbsave>Save</button>'}
+function lbOpen(l,i){if(!l.length)return;if(!LB)history.pushState({lb:1},'');LB={list:l,i};$('#lb').classList.remove('hide');lbShow()}
+function lbClose(){if(!LB)return;LB=null;$('#lb').classList.add('hide');if(history.state&&history.state.lb)history.back()}
+const lbGo=n=>{if(!LB||LB.list.length<2)return;LB.i=(LB.i+n+LB.list.length)%LB.list.length;lbShow()};
+function lbReload(z){const l=gal();if(!l.length)return lbClose();LB.list=l;LB.i=Math.max(0,l.findIndex(x=>x.key===z));lbShow()}
+window.addEventListener('popstate',()=>{if(LB){LB=null;$('#lb').classList.add('hide')}});
+(()=>{const s=$('#lbs'),P=new Map();let d0=0,s0=1,last=0,sx=0,moved=false;
+ s.onpointerdown=e=>{s.setPointerCapture(e.pointerId);P.set(e.pointerId,{x:e.clientX,y:e.clientY});moved=false;if(P.size===2){const[p,q]=[...P.values()];d0=Math.hypot(p.x-q.x,p.y-q.y);s0=Z.s}else{sx=e.clientX;const n=Date.now();if(n-last<300){Z.s>1?lbReset():(Z.s=2.5,lbAp());last=0}else last=n}};
+ s.onpointermove=e=>{const p=P.get(e.pointerId);if(!p)return;const dx=e.clientX-p.x,dy=e.clientY-p.y;p.x=e.clientX;p.y=e.clientY;moved=true;
+  if(P.size===2){const[u,v]=[...P.values()];Z.s=Math.min(6,Math.max(1,s0*Math.hypot(u.x-v.x,u.y-v.y)/d0));if(Z.s===1){Z.x=Z.y=0}lbAp()}else if(Z.s>1){Z.x+=dx;Z.y+=dy;lbAp()}};
+ s.onpointerup=s.onpointercancel=e=>{P.delete(e.pointerId);if(!P.size&&Z.s===1&&moved){const dx=e.clientX-sx;if(Math.abs(dx)>70)lbGo(dx<0?1:-1)}if(Z.s<1.03)lbReset()};
+ s.addEventListener('wheel',e=>{e.preventDefault();Z.s=Math.min(6,Math.max(1,Z.s*(e.deltaY<0?1.15:.87)));if(Z.s===1){Z.x=Z.y=0}lbAp()},{passive:false});
+ $('#lbf').onchange=async e=>{const f=e.target.files[0];e.target.value='';if(!f||!LB)return;try{const d=await pic(f),it=LB.list[LB.i];V().photos[it.key]=d;save();render();lbReload(it.key)}catch(x){alert(x.message||x)}};
+ document.addEventListener('keydown',e=>{if(!LB)return;if(e.key==='Escape')lbClose();if(e.key==='ArrowLeft')lbGo(-1);if(e.key==='ArrowRight')lbGo(1)})})();
 /* ---------- lock ---------- */
 function start(){render();autoTeam()}
 function lockCheck(){const p=db.pin;if(p&&!(p.ask===false&&localStorage.getItem('mk_ok')===p.h)){$('#lock').classList.remove('hide');$('#pin').focus()}else start()}
